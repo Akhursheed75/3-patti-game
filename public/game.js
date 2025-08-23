@@ -2,7 +2,12 @@
 class CardGame {
     constructor() {
         console.log('Initializing CardGame');
-        this.socket = io();
+        this.socket = io({
+            reconnection: true,
+            reconnectionDelay: 1000,
+            reconnectionAttempts: 10,
+            timeout: 20000
+        });
         this.currentScreen = 'mainMenu';
         this.playerName = '';
         this.roomCode = '';
@@ -82,6 +87,7 @@ class CardGame {
             console.log('Room created event received:', data);
             this.roomCode = data.roomCode;
             this.playerId = data.player.id;
+            this.playerName = data.player.name;
             this.isRoomCreator = true;
             this.updateLobby(data);
             this.showScreen('lobby');
@@ -91,6 +97,7 @@ class CardGame {
             console.log('Room joined event received:', data);
             this.roomCode = data.roomCode;
             this.playerId = data.player.id;
+            this.playerName = data.player.name;
             this.isRoomCreator = false;
             this.updateLobby(data);
             this.showScreen('lobby');
@@ -133,6 +140,12 @@ class CardGame {
             this.updateOtherPlayers();
             this.updateCurrentPlayerDisplay();
             this.updateTakeCardsButton();
+            
+            // Show feedback for card play
+            if (data.playedBy !== this.playerId) {
+                const player = this.gameState.players.find(p => p.id === data.playedBy);
+                this.showToast(`${player?.name || 'Player'} played a card`, 'success');
+            }
         });
 
         this.socket.on('tableCardsTaken', (data) => {
@@ -157,8 +170,29 @@ class CardGame {
             this.showError(message);
         });
 
+        this.socket.on('connect', () => {
+            console.log('Connected to server');
+            this.hideReconnectingMessage();
+            
+            // Try to rejoin room if we were in one
+            if (this.roomCode && this.playerName) {
+                console.log('Attempting to rejoin room:', this.roomCode);
+                this.socket.emit('rejoinRoom', {
+                    roomCode: this.roomCode,
+                    playerName: this.playerName,
+                    playerId: this.playerId
+                });
+            }
+        });
+
         this.socket.on('disconnect', () => {
-            this.showError('Connection lost. Please refresh the page.');
+            console.log('Disconnected from server');
+            this.showReconnectingMessage();
+        });
+        
+        this.socket.on('connect_error', (error) => {
+            console.log('Connection error:', error);
+            this.showReconnectingMessage();
         });
     }
 
@@ -182,8 +216,48 @@ class CardGame {
 
     // Error handling
     showError(message) {
-        document.getElementById('errorMessage').textContent = message;
-        this.showModal('errorModal');
+        this.showToast(message, 'error');
+    }
+    
+    showToast(message, type = 'info') {
+        // Remove existing toasts
+        const existingToasts = document.querySelectorAll('.toast');
+        existingToasts.forEach(toast => toast.remove());
+        
+        const toast = document.createElement('div');
+        toast.className = `toast ${type}`;
+        toast.textContent = message;
+        
+        document.body.appendChild(toast);
+        
+        // Auto remove after 3 seconds
+        setTimeout(() => {
+            if (toast.parentNode) {
+                toast.remove();
+            }
+        }, 3000);
+    }
+    
+    showReconnectingMessage() {
+        // Show persistent reconnecting message
+        const existingMsg = document.getElementById('reconnectingMessage');
+        if (existingMsg) return;
+        
+        const reconnectMsg = document.createElement('div');
+        reconnectMsg.id = 'reconnectingMessage';
+        reconnectMsg.className = 'toast warning';
+        reconnectMsg.textContent = '🔄 Reconnecting...';
+        reconnectMsg.style.top = '70px';
+        reconnectMsg.style.animation = 'none';
+        
+        document.body.appendChild(reconnectMsg);
+    }
+    
+    hideReconnectingMessage() {
+        const reconnectMsg = document.getElementById('reconnectingMessage');
+        if (reconnectMsg) {
+            reconnectMsg.remove();
+        }
     }
 
     // Main menu actions
@@ -565,11 +639,12 @@ class CardGame {
         // Card 2 cannot be played alone
         if (card.numericValue === 2) return false;
         
-        // Other special cards can be played alone
-        if (card.numericValue === 7 || card.numericValue === 8 || card.numericValue === 10) {
+        // Only Card 10 can bypass hierarchy when played alone
+        if (card.numericValue === 10) {
             return true;
         }
         
+        // Cards 7 and 8 have special effects but must follow hierarchy
         // Regular rule: same number or higher number
         return card.numericValue >= lastCardValue;
     }
@@ -582,10 +657,13 @@ class CardGame {
         const hasTwo = cards.some(card => card.numericValue === 2);
         
         if (hasTwo) {
-            // Card 2 combo: Must have other valid cards
+            // Card 2 combo: Card 2 bypasses hierarchy completely
             const otherCards = cards.filter(card => card.numericValue !== 2);
             if (otherCards.length === 0) return false;
-            return otherCards.every(card => card.numericValue >= lastCardValue);
+            
+            // When Card 2 is played with other cards, it bypasses ALL hierarchy
+            // ANY card can be played with Card 2, regardless of table card
+            return true;
         } else {
             // Same number combo: All cards must be same number and valid
             const firstCardValue = cards[0].numericValue;

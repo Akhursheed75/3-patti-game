@@ -96,11 +96,12 @@ function dealInitialCards(gameState) {
 
 // Check if a card can be played
 function canPlayCard(card, lastCardValue, tableCards) {
-  // Special cards can always be played
-  if (card.numericValue === 2 || card.numericValue === 7 || card.numericValue === 8 || card.numericValue === 10) {
+  // Only cards 2 and 10 can bypass hierarchy
+  if (card.numericValue === 2 || card.numericValue === 10) {
     return true;
   }
   
+  // Cards 7 and 8 have special effects but must follow hierarchy
   // Regular rule: same number or higher number
   return card.numericValue >= lastCardValue;
 }
@@ -119,15 +120,18 @@ function canPlayCardCombo(cards, lastCardValue, tableCards) {
   
   // Multiple cards - two types allowed:
   // 1. Same number combos (pairs, trips, quads)
-  // 2. Card 2 + other valid cards
+  // 2. Card 2 + other cards (Card 2 bypasses all hierarchy)
   
   const hasTwo = cards.some(card => card.numericValue === 2);
   
   if (hasTwo) {
-    // Card 2 combo: Must have other valid cards
+    // Card 2 combo: Card 2 bypasses hierarchy completely
     const otherCards = cards.filter(card => card.numericValue !== 2);
     if (otherCards.length === 0) return false; // Card 2 cannot be alone
-    return otherCards.every(card => card.numericValue >= lastCardValue);
+    
+    // When Card 2 is played with other cards, it bypasses ALL hierarchy
+    // ANY card can be played with Card 2, regardless of table card
+    return true;
   } else {
     // Same number combo: All cards must be same number and valid
     const firstCardValue = cards[0].numericValue;
@@ -187,7 +191,16 @@ function handleCardPlay(gameState, playerId, cardData) {
   cardsToPlay.forEach(card => {
     gameState.tableCards.push(card);
   });
-  gameState.lastCardValue = cardsToPlay[cardsToPlay.length - 1].numericValue;
+  
+  // Set the last card value for next player
+  // If Card 2 was played with other cards, use the highest non-2 card
+  const hasTwo = cardsToPlay.some(card => card.numericValue === 2);
+  if (hasTwo && cardsToPlay.length > 1) {
+    const nonTwoCards = cardsToPlay.filter(card => card.numericValue !== 2);
+    gameState.lastCardValue = Math.max(...nonTwoCards.map(card => card.numericValue));
+  } else {
+    gameState.lastCardValue = cardsToPlay[cardsToPlay.length - 1].numericValue;
+  }
   
   // Handle power card effects (check all played cards for effects)
   cardsToPlay.forEach(card => {
@@ -480,6 +493,68 @@ io.on('connection', (socket) => {
     // No hand cards to send - visible cards are already sent in gameState
   });
   
+  socket.on('rejoinRoom', (data) => {
+    console.log('Player attempting to rejoin room:', data);
+    const gameState = gameRooms.get(data.roomCode);
+    
+    if (!gameState) {
+      socket.emit('error', 'Room no longer exists');
+      return;
+    }
+    
+    // Find existing player by name
+    let existingPlayer = gameState.players.find(p => p.name === data.playerName);
+    
+    if (existingPlayer) {
+      // Update socket ID for existing player
+      const oldSocketId = existingPlayer.id;
+      existingPlayer.id = socket.id;
+      existingPlayer.disconnected = false;
+      
+      console.log('Player reconnected:', data.playerName);
+      
+      socket.join(data.roomCode);
+      playerSockets.set(socket.id, data.roomCode);
+      
+      // Remove old socket mapping
+      if (oldSocketId) {
+        playerSockets.delete(oldSocketId);
+      }
+      
+      // Send current state back to reconnected player
+      if (gameState.gameStarted) {
+        socket.emit('gameStarted', {
+          players: gameState.players.map(p => ({
+            id: p.id,
+            name: p.name,
+            handCards: p.id === socket.id ? p.handCards : [],
+            blindCount: p.blindCards.length,
+            ready: p.ready
+          })),
+          tableCards: gameState.tableCards,
+          currentPlayer: gameState.currentPlayer,
+          deckCount: gameState.deck.length,
+          mustThrowAfterTaking: gameState.mustThrowAfterTaking,
+          playerWhoTook: gameState.playerWhoTook
+        });
+      } else {
+        socket.emit('roomJoined', {
+          roomCode: data.roomCode,
+          player: existingPlayer,
+          players: gameState.players
+        });
+      }
+      
+      // Notify other players
+      socket.to(data.roomCode).emit('playerJoined', {
+        players: gameState.players,
+        roomCode: data.roomCode
+      });
+    } else {
+      socket.emit('error', 'Player not found in room');
+    }
+  });
+
   socket.on('disconnect', () => {
     console.log('Client disconnected:', socket.id);
     
@@ -487,18 +562,30 @@ io.on('connection', (socket) => {
     if (roomCode) {
       const gameState = gameRooms.get(roomCode);
       if (gameState) {
-        gameState.players = gameState.players.filter(p => p.id !== socket.id);
-        
-        if (gameState.players.length === 0) {
-          gameRooms.delete(roomCode);
-        } else {
-          io.to(roomCode).emit('playerLeft', { 
-            playerId: socket.id,
-            players: gameState.players 
-          });
+        const player = gameState.players.find(p => p.id === socket.id);
+        if (player) {
+          player.disconnected = true;
+          console.log(`Player ${player.name} marked as disconnected`);
+          
+          // Give them 60 seconds to reconnect before removing
+          setTimeout(() => {
+            const stillDisconnected = gameState.players.find(p => p.id === socket.id && p.disconnected);
+            if (stillDisconnected) {
+              gameState.players = gameState.players.filter(p => p.id !== socket.id);
+              
+              if (gameState.players.length === 0) {
+                gameRooms.delete(roomCode);
+              } else {
+                io.to(roomCode).emit('playerLeft', { 
+                  playerId: socket.id,
+                  players: gameState.players 
+                });
+              }
+              playerSockets.delete(socket.id);
+            }
+          }, 60000); // 60 second grace period
         }
       }
-      playerSockets.delete(socket.id);
     }
   });
 });
