@@ -22,6 +22,8 @@ class CardGame {
             playerWhoTook: null
         };
         this.selectedCards = [];
+        this.isSelectingBlindForCard2 = false;
+        this.selectedBlindCardIndex = null;
         
         console.log('Socket connected:', this.socket.connected);
         this.socket.on('connect', () => {
@@ -129,12 +131,19 @@ class CardGame {
         // No longer need handCards event since players use visible cards
 
         this.socket.on('cardPlayed', (data) => {
+            console.log('cardPlayed event received:', data);
             this.gameState.tableCards = data.tableCards;
             this.gameState.currentPlayer = data.currentPlayer;
             this.gameState.players = data.players;
             this.gameState.deckCount = data.deckCount;
             this.gameState.mustThrowAfterTaking = data.mustThrowAfterTaking;
             this.gameState.playerWhoTook = data.playerWhoTook;
+            
+            // Reset Card 2 selection state after any card play
+            this.isSelectingBlindForCard2 = false;
+            this.selectedBlindCardIndex = null;
+            this.selectedCards = [];
+            
             this.updateGameScreen();
             this.updateTableCards();
             this.updateOtherPlayers();
@@ -484,8 +493,10 @@ class CardGame {
         const handCardsDiv = document.getElementById('handCards');
         handCardsDiv.innerHTML = '';
         
-        // Clear selection when updating hand
-        this.selectedCards = [];
+        // Clear selection when updating hand (but preserve Card 2 blind selection if active)
+        if (!this.isSelectingBlindForCard2) {
+            this.selectedCards = [];
+        }
         
         const currentPlayer = this.gameState.players.find(p => p.id === this.playerId);
         if (currentPlayer && currentPlayer.handCards) {
@@ -512,7 +523,7 @@ class CardGame {
                 blindCardsSection.style.display = 'block';
                 blindCardsDiv.innerHTML = '';
                 for (let i = 0; i < currentPlayer.blindCount; i++) {
-                    const cardDiv = this.createBlindCardElement();
+                    const cardDiv = this.createBlindCardElement(i);
                     blindCardsDiv.appendChild(cardDiv);
                 }
             } else {
@@ -565,23 +576,60 @@ class CardGame {
             this.selectedCards.splice(cardIndex, 1);
             cardElement.classList.remove('selected');
             console.log('Card deselected. Selected cards:', this.selectedCards.length);
+            
+            // If we deselected Card 2, exit blind selection mode
+            if (card.numericValue === 2) {
+                this.isSelectingBlindForCard2 = false;
+                this.selectedBlindCardIndex = null;
+                this.updateBlindCardSelection();
+            }
         } else {
             // Select card
             this.selectedCards.push(card);
             cardElement.classList.add('selected');
             console.log('Card selected. Selected cards:', this.selectedCards.length);
+            
+            // Check if this is Card 2 and it's the last hand card
+            const currentPlayer = this.gameState.players.find(p => p.id === this.playerId);
+            if (card.numericValue === 2 && currentPlayer.handCards.length === 1 && currentPlayer.blindCount > 0) {
+                console.log('Card 2 selected as last hand card - enabling blind card selection');
+                this.isSelectingBlindForCard2 = true;
+                this.showToast('Select a blind card to play with Card 2', 'info');
+            }
         }
         
         this.updatePlayCardsButton();
     }
 
-    createBlindCardElement() {
+    createBlindCardElement(index) {
         const cardDiv = document.createElement('div');
         cardDiv.className = 'card blind';
+        cardDiv.dataset.blindIndex = index; // Store index for identification
         cardDiv.innerHTML = `
             <div class="card-value">?</div>
             <div class="card-suit">?</div>
         `;
+        
+        // Add click handler for blind card selection
+        cardDiv.addEventListener('click', () => {
+            console.log('Blind card clicked, index:', index);
+            console.log('isSelectingBlindForCard2:', this.isSelectingBlindForCard2);
+            
+            // Only use Card 2 combo if we're explicitly in that mode AND have Card 2 selected
+            if (this.isSelectingBlindForCard2 && this.selectedCards.length === 1 && 
+                this.selectedCards[0].numericValue === 2) {
+                this.selectBlindCardForCard2(index);
+            } else {
+                // Reset any Card 2 selection state and play blind card normally
+                this.isSelectingBlindForCard2 = false;
+                this.selectedBlindCardIndex = null;
+                this.selectedCards = [];
+                this.updateHandCards();
+                this.updateBlindCardSelection();
+                this.playBlindCard(index);
+            }
+        });
+        
         return cardDiv;
     }
 
@@ -699,6 +747,15 @@ class CardGame {
         
         console.log('Updating play button. My turn:', isMyTurn, 'Must throw:', mustThrowAfterTaking, 'Selected:', this.selectedCards.length);
         
+        // Special case: Card 2 + blind card combo
+        if (this.isSelectingBlindForCard2 && this.selectedCards.length === 1 && this.selectedBlindCardIndex !== null) {
+            playCardsBtn.style.display = 'block';
+            playCardsBtn.textContent = 'Play Card 2 + Blind Card';
+            playCardsBtn.onclick = () => this.playCard2WithBlindCard();
+            console.log('Card 2 + blind combo button shown');
+            return;
+        }
+        
         if ((isMyTurn || mustThrowAfterTaking) && this.selectedCards.length > 0) {
             const lastCardValue = this.gameState.tableCards.length > 0 
                 ? this.gameState.tableCards[this.gameState.tableCards.length - 1].numericValue 
@@ -711,6 +768,7 @@ class CardGame {
             if (canPlay) {
                 playCardsBtn.style.display = 'block';
                 playCardsBtn.textContent = `Play ${this.selectedCards.length} Card${this.selectedCards.length > 1 ? 's' : ''}`;
+                playCardsBtn.onclick = () => this.playSelectedCards();
                 console.log('Play button shown');
             } else {
                 playCardsBtn.style.display = 'none';
@@ -746,6 +804,92 @@ class CardGame {
         
         // Clear selection
         this.selectedCards = [];
+        this.updateHandCards();
+    }
+    
+    playBlindCard(blindIndex) {
+        console.log('Playing blind card at index:', blindIndex);
+        console.log('Current player:', this.gameState.currentPlayer);
+        console.log('My player ID:', this.playerId);
+        
+        // Check if it's this player's turn (either normal turn or mandatory throw)
+        const isMyTurn = this.gameState.currentPlayer === this.playerId;
+        const mustThrowAfterTaking = this.gameState.mustThrowAfterTaking && this.gameState.playerWhoTook === this.playerId;
+        
+        console.log('Is my turn:', isMyTurn);
+        console.log('Must throw after taking:', mustThrowAfterTaking);
+        
+        if (!isMyTurn && !mustThrowAfterTaking) {
+            this.showError("It's not your turn!");
+            return;
+        }
+        
+        // Check if player has no hand cards (required to play blind)
+        const currentPlayer = this.gameState.players.find(p => p.id === this.playerId);
+        if (!currentPlayer) {
+            this.showError("Player not found!");
+            return;
+        }
+        
+        if (currentPlayer.handCards && currentPlayer.handCards.length > 0) {
+            this.showError("You can only play blind cards when you have no hand cards!");
+            return;
+        }
+        
+        // Emit blind card play
+        this.socket.emit('playBlindCard', { blindIndex: blindIndex });
+    }
+    
+    selectBlindCardForCard2(blindIndex) {
+        console.log('Selecting blind card for Card 2 combo:', blindIndex);
+        
+        // Store the selected blind card index
+        this.selectedBlindCardIndex = blindIndex;
+        
+        // Highlight the selected blind card
+        this.updateBlindCardSelection();
+        
+        // Update the play button
+        this.updatePlayCardsButton();
+    }
+    
+    updateBlindCardSelection() {
+        const blindCards = document.querySelectorAll('#blindCards .card');
+        blindCards.forEach((cardElement, index) => {
+            if (index === this.selectedBlindCardIndex) {
+                cardElement.classList.add('selected');
+            } else {
+                cardElement.classList.remove('selected');
+            }
+        });
+    }
+    
+    playCard2WithBlindCard() {
+        if (this.selectedBlindCardIndex === null) {
+            this.showError("Please select a blind card to play with Card 2!");
+            return;
+        }
+        
+        // Find Card 2 in hand cards
+        const currentPlayer = this.gameState.players.find(p => p.id === this.playerId);
+        const card2 = currentPlayer.handCards.find(card => card.numericValue === 2);
+        
+        if (!card2) {
+            this.showError("Card 2 not found in hand!");
+            return;
+        }
+        
+        // Emit special combo play
+        this.socket.emit('playCard2WithBlind', { 
+            card2: card2, 
+            blindIndex: this.selectedBlindCardIndex 
+        });
+        
+        // Reset selection state
+        this.isSelectingBlindForCard2 = false;
+        this.selectedBlindCardIndex = null;
+        this.selectedCards = [];
+        this.updateBlindCardSelection();
         this.updateHandCards();
     }
 
