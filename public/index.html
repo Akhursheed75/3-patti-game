@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3 Patti Power Play</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="/socket.io/socket.io.js"></script>
+</head>
+<body>
+    <!-- Main Menu Screen -->
+    <div id="mainMenu" class="screen active">
+        <div class="container">
+            <h1>3 Patti Power Play</h1>
+            <p class="subtitle">Strategic Card Shedding Game</p>
+            
+            <div class="menu-options">
+                <div class="input-group">
+                    <input type="text" id="playerName" placeholder="Enter your name" maxlength="15">
+                </div>
+                
+                <button id="createRoomBtn" class="btn btn-primary">Create New Game</button>
+                
+                <div class="or-divider">
+                    <span>OR</span>
+                </div>
+                
+                <div class="input-group">
+                    <input type="text" id="roomCode" placeholder="Enter game code" maxlength="6">
+                </div>
+                <button id="joinRoomBtn" class="btn btn-secondary">Join Game</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Lobby Screen -->
+    <div id="lobby" class="screen">
+        <div class="container">
+            <div class="lobby-header">
+                <h2>Game Lobby</h2>
+                <div class="room-code">
+                    Code: <span id="currentRoomCode"></span>
+                    <button id="copyCodeBtn" class="btn-small">Copy</button>
+                </div>
+            </div>
+            
+            <div class="players-list">
+                <h3>Players (<span id="playerCount">0</span>/6)</h3>
+                <div id="playersList"></div>
+            </div>
+            
+            <div class="lobby-actions">
+                <button id="readyBtn" class="btn btn-primary">Ready</button>
+                <button id="startGameBtn" class="btn btn-success" style="display: none;">Start Game</button>
+                <button id="leaveLobbyBtn" class="btn btn-secondary">Leave</button>
+            </div>
+            
+            <div id="waitingMessage" class="waiting-message" style="display: none;">
+                Waiting for more players or all players to be ready...
+            </div>
+            
+            <div class="game-info">
+                <p><strong>3 Patti Power Play:</strong></p>
+                <ul>
+                    <li>2-6 players required to start</li>
+                    <li>3 hand cards (open) + 3 blind cards per player</li>
+                    <li>Match numbers or play higher</li>
+                    <li>Special cards: 2 (wild+extra), 7 (back), 8 (skip), 10 (clear)</li>
+                    <li>Draw only when ≤3 total cards</li>
+                    <li>Play blind cards when hand is empty</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- Game Screen -->
+    <div id="gameScreen" class="screen">
+        <div class="game-container">
+            <!-- Game Header -->
+            <div class="game-header">
+                <div class="current-player">
+                    <span id="currentPlayerName">Player's Turn</span>
+                </div>
+                <div class="deck-info">
+                    <span>Deck: <span id="deckCount">52</span></span>
+                </div>
+            </div>
+
+            <!-- Other Players -->
+            <div class="other-players" id="otherPlayers"></div>
+
+            <!-- Discard Pile -->
+            <div class="table-area">
+                <div class="table-cards" id="tableCards">
+                    <div class="empty-table">Discard Pile</div>
+                </div>
+                <button id="takeCardsBtn" class="btn btn-warning" style="display: none;">Pick Up Pile</button>
+            </div>
+
+            <!-- Current Player Area -->
+            <div class="player-area">
+                <!-- Hand Cards (3 cards initially, open/visible) -->
+                <div class="hand-cards-section" id="handCardsSection">
+                    <h4>Hand Cards (Open)</h4>
+                    <div class="hand-cards" id="handCards"></div>
+                    <button id="playCardsBtn" class="btn btn-primary" style="display: none;">Play Selected Cards</button>
+                </div>
+
+                <!-- Blind Cards (3 hidden cards, played without looking when hand is empty) -->
+                <div class="blind-cards-section" id="blindCardsSection">
+                    <h4>Blind Cards (<span id="blindCount">3</span>)</h4>
+                    <div class="blind-cards" id="blindCards"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Game Over Screen -->
+    <div id="gameOverScreen" class="screen">
+        <div class="container">
+            <h1>Game Over!</h1>
+            <div class="winner-announcement">
+                <h2 id="winnerName">Winner Name</h2>
+                <p>Congratulations!</p>
+            </div>
+            <button id="newGameBtn" class="btn btn-primary">New Game</button>
+        </div>
+    </div>
+
+    <!-- Error Modal -->
+    <div id="errorModal" class="modal">
+        <div class="modal-content">
+            <h3>Error</h3>
+            <p id="errorMessage"></p>
+            <button id="closeErrorBtn" class="btn btn-primary">OK</button>
+        </div>
+    </div>
+
+    <!-- Game Rules Modal -->
+    <div id="rulesModal" class="modal">
+        <div class="modal-content">
+            <h3>Game Rules</h3>
+            <div class="rules-content">
+                <h4>3 Patti Power Play Rules:</h4>
+                <ul>
+                    <li>Each player starts with 3 hand cards (open) + 3 blind cards</li>
+                    <li>Play same number, higher number, or special cards</li>
+                    <li>Maintain minimum 3 cards while deck exists</li>
+                    <li>Can play multiple cards of same number (pairs, trips, quads)</li>
+                    <li>If you can't play, pick up the entire discard pile</li>
+                    <li>When hand is empty, play blind cards without looking</li>
+                    <li>First to discard all cards wins!</li>
+                </ul>
+                
+                <h4>Power Cards:</h4>
+                <ul>
+                    <li><strong>2:</strong> Must be played WITH other cards (pairs, trips, etc.)</li>
+                    <li><strong>7:</strong> Turn goes back to previous player</li>
+                    <li><strong>8:</strong> Skip next player's turn</li>
+                    <li><strong>10:</strong> Clear pile - removes all cards from discard pile</li>
+                </ul>
+                
+                <h4>Winning:</h4>
+                <p>First player to use all their cards wins!</p>
+            </div>
+            <button id="closeRulesBtn" class="btn btn-primary">Got it!</button>
+        </div>
+    </div>
+
+    <button id="rulesBtn" class="floating-btn">?</button>
+
+    <script src="game.js"></script>
+</body>
+</html>
