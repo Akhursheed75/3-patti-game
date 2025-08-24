@@ -341,11 +341,10 @@ io.on('connection', (socket) => {
     const gameState = gameRooms.get(roomCode);
     
     if (gameState && !gameState.gameStarted) {
-      // Check if the player is the room creator (first player in the room)
-      const isCreator = gameState.players[0].id === socket.id;
-      
-      if (!isCreator) {
-        socket.emit('error', 'Only room creator can start the game');
+      // Check if the requesting player is in the room
+      const player = gameState.players.find(p => p.id === socket.id);
+      if (!player) {
+        socket.emit('error', 'You are not in this room');
         return;
       }
       

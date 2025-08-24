@@ -365,24 +365,21 @@ class CardGame {
         const readyBtn = document.getElementById('readyBtn');
         const waitingMessage = document.getElementById('waitingMessage');
         
-        if (this.isRoomCreator) {
-            const allReady = players.length >= 2 && players.every(p => p.isReady);
-            
-            if (allReady) {
-                startGameBtn.style.display = 'block';
-                readyBtn.style.display = 'none';
-                waitingMessage.style.display = 'none';
-            } else {
-                startGameBtn.style.display = 'none';
-                readyBtn.style.display = 'block';
-                waitingMessage.style.display = 'block';
-                waitingMessage.textContent = players.length < 2 
-                    ? 'Waiting for more players to join...' 
-                    : 'Waiting for all players to be ready...';
-            }
+        const allReady = players.length >= 2 && players.every(p => p.isReady);
+        
+        if (allReady) {
+            // Anyone can start when all are ready
+            startGameBtn.style.display = 'block';
+            readyBtn.style.display = 'none';
+            waitingMessage.style.display = 'none';
+            startGameBtn.textContent = 'Start Game';
         } else {
             startGameBtn.style.display = 'none';
             readyBtn.style.display = 'block';
+            waitingMessage.style.display = 'block';
+            waitingMessage.textContent = players.length < 2 
+                ? 'Waiting for more players to join...' 
+                : 'Waiting for all players to be ready...';
         }
     }
 
@@ -405,7 +402,7 @@ class CardGame {
     }
     
     startGame() {
-        console.log('Starting game as room creator');
+        console.log('Starting game (anyone can start when all ready)');
         this.socket.emit('startGame');
     }
 
