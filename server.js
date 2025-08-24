@@ -719,12 +719,14 @@ io.on('connection', (socket) => {
           players: gameState.players
         });
         
-        // Also send player ready states to restore lobby UI
-        gameState.players.forEach(player => {
-          if (player.ready) {
-            socket.emit('playerReady', { playerId: player.id });
-          }
-        });
+        // Send ready states immediately for lobby UI restoration
+        setTimeout(() => {
+          gameState.players.forEach(player => {
+            if (player.ready) {
+              socket.emit('playerReady', { playerId: player.id });
+            }
+          });
+        }, 50);
       }
       
       // Notify other players

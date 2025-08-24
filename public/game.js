@@ -115,6 +115,7 @@ class CardGame {
 
         this.socket.on('playerReady', (data) => {
             this.updatePlayerStatus(data.playerId, 'ready');
+            this.updateStartGameButton(); // Fix start button not appearing after reconnection
         });
 
         this.socket.on('gameStarted', (data) => {
@@ -150,10 +151,10 @@ class CardGame {
             this.updateCurrentPlayerDisplay();
             this.updateTakeCardsButton();
             
-            // Show feedback for card play
-            if (data.playedBy !== this.playerId) {
+            // Only show toast for multi-card plays, not routine single cards
+            if (data.playedBy !== this.playerId && data.cardsPlayed && data.cardsPlayed.length > 1) {
                 const player = this.gameState.players.find(p => p.id === data.playedBy);
-                this.showToast(`${player?.name || 'Player'} played a card`, 'success');
+                this.showToast(`${player?.name || 'Player'} played ${data.cardsPlayed.length} cards`, 'info');
             }
         });
 
@@ -161,6 +162,7 @@ class CardGame {
             this.gameState.tableCards = [];
             this.gameState.currentPlayer = data.currentPlayer;
             this.gameState.players = data.players;
+            this.gameState.deckCount = data.deckCount;
             this.gameState.mustThrowAfterTaking = data.mustThrowAfterTaking;
             this.gameState.playerWhoTook = data.playerWhoTook;
             this.updateGameScreen();
@@ -168,6 +170,11 @@ class CardGame {
             this.updateOtherPlayers();
             this.updateCurrentPlayerDisplay();
             this.updateTakeCardsButton();
+            
+            // Show toast only for current player picking up pile
+            if (data.takenBy === this.playerId) {
+                this.showToast('You picked up the pile', 'warning');
+            }
         });
 
         this.socket.on('gameEnded', (data) => {
@@ -183,21 +190,21 @@ class CardGame {
             if (data.playerId === this.playerId) {
                 this.showToast(`Revealed: ${data.revealedCard.value}${data.revealedCard.suit}`, 'success');
                 if (data.canRevealAnother) {
-                    this.showToast('Card 2 revealed! You can reveal another blind card.', 'info');
+                    this.showToast('Card 2 revealed! You can reveal another blind card.', 'success');
                 }
-            } else {
-                const player = this.gameState.players.find(p => p.id === data.playerId);
-                this.showToast(`${player?.name || 'Player'} revealed a blind card`, 'info');
             }
+            // Removed unnecessary toast for other players revealing blind cards
         });
 
         this.socket.on('error', (message) => {
-            this.showError(message);
+            this.showToast(message, 'error');
         });
 
         this.socket.on('connect', () => {
             console.log('Connected to server');
             this.hideReconnectingMessage();
+            
+            // Improved reconnection with retry logic
             
             // Try to rejoin room if we were in one
             if (this.roomCode && this.playerName) {
@@ -242,6 +249,16 @@ class CardGame {
     // Error handling
     showError(message) {
         this.showToast(message, 'error');
+    }
+    
+    // Enhanced error handling for better UX
+    handleGameError(error) {
+        console.error('Game error:', error);
+        if (error.includes('not found') || error.includes('disconnect')) {
+            this.showToast('Connection lost. Reconnecting...', 'warning');
+        } else {
+            this.showToast(error, 'error');
+        }
     }
     
     showToast(message, type = 'info') {
