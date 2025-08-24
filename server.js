@@ -493,9 +493,8 @@ io.on('connection', (socket) => {
     // No hand cards to send - visible cards are already sent in gameState
   });
   
-  socket.on('playBlindCard', (data) => {
-    console.log('Play blind card request:', data);
-    console.log('Socket ID:', socket.id);
+  socket.on('revealBlindCard', (data) => {
+    console.log('Reveal blind card request:', data);
     const roomCode = playerSockets.get(socket.id);
     const gameState = gameRooms.get(roomCode);
     
@@ -504,15 +503,9 @@ io.on('connection', (socket) => {
       return;
     }
     
-    console.log('Current player in gameState:', gameState.players[gameState.currentPlayerIndex]?.id);
-    console.log('Socket ID requesting:', socket.id);
-    console.log('Must throw after taking:', gameState.mustThrowAfterTaking);
-    console.log('Player who took:', gameState.playerWhoTook);
-    
     const currentPlayerId = gameState.players[gameState.currentPlayerIndex]?.id;
     if (currentPlayerId !== socket.id) {
       if (!gameState.mustThrowAfterTaking || gameState.playerWhoTook !== socket.id) {
-        console.log('Turn validation failed - not current player');
         socket.emit('error', 'Not your turn');
         return;
       }
@@ -524,9 +517,12 @@ io.on('connection', (socket) => {
       return;
     }
     
-    // Check if player has hand cards (shouldn't play blind if they have hand cards)
-    if (player.handCards.length > 0) {
-      socket.emit('error', 'Cannot play blind cards while you have hand cards');
+    // Check conditions for revealing blind cards
+    const allHandCardsAre2s = player.handCards.length > 0 && player.handCards.every(c => c.numericValue === 2);
+    const noHandCards = player.handCards.length === 0;
+    
+    if (!allHandCardsAre2s && !noHandCards) {
+      socket.emit('error', 'Can only reveal blind cards when hand is empty or all hand cards are 2s');
       return;
     }
     
@@ -536,86 +532,31 @@ io.on('connection', (socket) => {
       return;
     }
     
-    // Get the blind card and move it to hand cards (reveal it)
+    // Move blind card to hand cards (reveal it)
     const blindCard = player.blindCards.splice(data.blindIndex, 1)[0];
     player.handCards.push(blindCard);
     
-    console.log('Blind card revealed:', blindCard);
+    console.log('Blind card revealed to hand:', blindCard);
     
-    // Now try to play this card
-    const result = handleCardPlay(gameState, socket.id, { card: blindCard });
+    // If the revealed card is a 2, player can continue revealing on same turn
+    // Otherwise, they can now play normally with their revealed cards
     
-    if (!result.success) {
-      // If card is invalid, player must pick up the pile
-      console.log('Blind card invalid, player picks up pile');
-      
-      // Add all table cards to player's hand
-      player.handCards.push(...gameState.tableCards);
-      gameState.tableCards = [];
-      gameState.lastCardValue = 0;
-      
-      // Player who picks up pile must throw next
-      gameState.mustThrowAfterTaking = true;
-      gameState.playerWhoTook = socket.id;
-      
-      io.to(roomCode).emit('tableCardsTaken', {
-        takenBy: socket.id,
-        tableCards: [],
-        currentPlayer: gameState.players[gameState.currentPlayerIndex].id,
-        players: gameState.players.map(p => ({
-          id: p.id,
-          name: p.name,
-          handCards: p.handCards, // Send all hand cards for sync
-          blindCount: p.blindCards.length,
-          ready: p.ready
-        })),
-        deckCount: gameState.deck.length,
-        mustThrowAfterTaking: gameState.mustThrowAfterTaking,
-        playerWhoTook: gameState.playerWhoTook
-      });
-      return;
-    }
-    
-    // Clear flags
-    gameState.mustThrowAfterTaking = false;
-    gameState.playerWhoTook = null;
-    
-    // Check for win condition
-    if (player.handCards.length === 0 && player.blindCards.length === 0) {
-      io.to(roomCode).emit('gameEnded', { winner: socket.id });
-      return;
-    }
-    
-    // Check if revealed card was a 2 and player needs to play another card
-    if (blindCard.numericValue === 2) {
-      // Player revealed a 2, they need to play another card immediately
-      gameState.mustThrowAfterTaking = true;
-      gameState.playerWhoTook = socket.id;
-    } else {
-      // Move to next player
-      nextPlayer(gameState);
-    }
-    
-    io.to(roomCode).emit('cardPlayed', {
-      playedBy: socket.id,
-      cardsPlayed: [blindCard],
-      tableCards: gameState.tableCards,
-      currentPlayer: gameState.players[gameState.currentPlayerIndex].id,
+    io.to(roomCode).emit('blindCardRevealed', {
+      playerId: socket.id,
+      revealedCard: blindCard,
       players: gameState.players.map(p => ({
         id: p.id,
         name: p.name,
-        handCards: p.handCards, // Send all hand cards to all players for sync
+        handCards: p.handCards,
         blindCount: p.blindCards.length,
         ready: p.ready
       })),
-      deckCount: gameState.deck.length,
-      mustThrowAfterTaking: gameState.mustThrowAfterTaking,
-      playerWhoTook: gameState.playerWhoTook
+      canRevealAnother: blindCard.numericValue === 2 && player.blindCards.length > 0
     });
   });
   
   socket.on('playCard2WithBlind', (data) => {
-    console.log('Play Card 2 with blind card request:', data);
+    console.log('Play Card 2s with blind card request:', data);
     const roomCode = playerSockets.get(socket.id);
     const gameState = gameRooms.get(roomCode);
     
@@ -637,19 +578,24 @@ io.on('connection', (socket) => {
       return;
     }
     
-    // Validate that player has Card 2 in hand
-    const card2Index = player.handCards.findIndex(c => 
-      c.suit === data.card2.suit && c.value === data.card2.value && c.numericValue === 2
-    );
-    if (card2Index === -1) {
-      socket.emit('error', 'Card 2 not found in hand');
+    // Support both old format (single card2) and new format (multiple card2s)
+    const card2s = data.card2s || [data.card2];
+    if (!card2s || card2s.length === 0) {
+      socket.emit('error', 'No Card 2s provided');
       return;
     }
     
-    // Validate that player has only Card 2 as last hand card
-    if (player.handCards.length !== 1) {
-      socket.emit('error', 'Can only use Card 2 + blind combo when Card 2 is your last hand card');
-      return;
+    // Validate that all provided cards are Card 2s and exist in hand
+    const card2Indices = [];
+    for (const card2 of card2s) {
+      const index = player.handCards.findIndex(c => 
+        c.suit === card2.suit && c.value === card2.value && c.numericValue === 2
+      );
+      if (index === -1) {
+        socket.emit('error', `Card 2 ${card2.value}${card2.suit} not found in hand`);
+        return;
+      }
+      card2Indices.push(index);
     }
     
     // Validate blind index
@@ -660,34 +606,35 @@ io.on('connection', (socket) => {
     
     // Reveal the blind card
     const blindCard = player.blindCards.splice(data.blindIndex, 1)[0];
-    console.log('Blind card revealed for Card 2 combo:', blindCard);
+    console.log('Blind card revealed for Card 2s combo:', blindCard);
     
-    // Remove Card 2 from hand
-    const card2 = player.handCards.splice(card2Index, 1)[0];
+    // Remove Card 2s from hand (in reverse order to maintain indices)
+    const removedCard2s = [];
+    card2Indices.sort((a, b) => b - a).forEach(index => {
+      removedCard2s.unshift(player.handCards.splice(index, 1)[0]);
+    });
     
-    // Play both cards together
-    const cardsToPlay = [card2, blindCard];
+    // Play all cards together (Card 2s + blind card)
+    const cardsToPlay = [...removedCard2s, blindCard];
     
     // Add cards to table
     cardsToPlay.forEach(card => {
       gameState.tableCards.push(card);
     });
     
-    // Set last card value to the blind card's value (Card 2 bypasses, so use other card)
+    // Set last card value to the blind card's value (Card 2s bypass, so use blind card)
     gameState.lastCardValue = blindCard.numericValue;
     
-    // Handle power card effects
-    cardsToPlay.forEach(card => {
-      if (card.numericValue === 10) {
-        gameState.tableCards = [];
-        gameState.lastCardValue = 0;
-      } else if (card.numericValue === 7) {
-        gameState.currentPlayerIndex = (gameState.currentPlayerIndex - 1 + gameState.players.length) % gameState.players.length;
-        gameState.skipNextPlayer = true;
-      } else if (card.numericValue === 8) {
-        gameState.skipNextPlayer = true;
-      }
-    });
+    // Handle power card effects (check blind card for effects)
+    if (blindCard.numericValue === 10) {
+      gameState.tableCards = [];
+      gameState.lastCardValue = 0;
+    } else if (blindCard.numericValue === 7) {
+      gameState.currentPlayerIndex = (gameState.currentPlayerIndex - 1 + gameState.players.length) % gameState.players.length;
+      gameState.skipNextPlayer = true;
+    } else if (blindCard.numericValue === 8) {
+      gameState.skipNextPlayer = true;
+    }
     
     // Clear flags
     gameState.mustThrowAfterTaking = false;
@@ -710,7 +657,7 @@ io.on('connection', (socket) => {
       players: gameState.players.map(p => ({
         id: p.id,
         name: p.name,
-        handCards: p.id === socket.id ? p.handCards : [],
+        handCards: p.handCards, // Send all hand cards for sync
         blindCount: p.blindCards.length,
         ready: p.ready
       })),
@@ -765,10 +712,18 @@ io.on('connection', (socket) => {
           playerWhoTook: gameState.playerWhoTook
         });
       } else {
+        // For lobby reconnection, send proper lobby state
         socket.emit('roomJoined', {
           roomCode: data.roomCode,
           player: existingPlayer,
           players: gameState.players
+        });
+        
+        // Also send player ready states to restore lobby UI
+        gameState.players.forEach(player => {
+          if (player.ready) {
+            socket.emit('playerReady', { playerId: player.id });
+          }
         });
       }
       
