@@ -57,7 +57,7 @@ class CardGame {
         
         // Game
         document.getElementById('takeCardsBtn').addEventListener('click', () => this.takeTableCards());
-        document.getElementById('playCardsBtn').addEventListener('click', () => this.playSelectedCards());
+        // Play cards button - dynamic onclick handler set in updatePlayCardsButton()
         
         // Modals
         document.getElementById('closeErrorBtn').addEventListener('click', () => this.closeModal('errorModal'));
@@ -805,8 +805,9 @@ class CardGame {
     }
     
     playSelectedCards() {
+        // Button should only be visible when cards are properly selected and valid
         if (this.selectedCards.length === 0) {
-            this.showError("No cards selected!");
+            console.log('No cards selected - this should not happen if button logic is correct');
             return;
         }
         
