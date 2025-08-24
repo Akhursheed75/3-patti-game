@@ -58,6 +58,19 @@
                 <button id="leaveLobbyBtn" class="btn btn-secondary">Leave</button>
             </div>
             
+            <!-- Voice Chat Controls -->
+            <div class="voice-chat-controls">
+                <div class="voice-status">
+                    <span id="voiceStatus">🎤 Voice Chat</span>
+                </div>
+                <button id="toggleMicBtn" class="btn btn-voice" title="Toggle Microphone">
+                    🎤 Mute
+                </button>
+                <div class="voice-participants">
+                    <span id="voiceParticipantsCount">0</span> players connected
+                </div>
+            </div>
+            
             <div id="waitingMessage" class="waiting-message" style="display: none;">
                 Waiting for more players or all players to be ready...
             </div>
@@ -86,6 +99,13 @@
                 </div>
                 <div class="deck-info">
                     <span>Deck: <span id="deckCount">52</span></span>
+                </div>
+                <!-- Voice Chat Controls -->
+                <div class="voice-chat-controls game-voice">
+                    <button id="gameToggleMicBtn" class="btn btn-voice" title="Toggle Microphone">
+                        🎤 Mute
+                    </button>
+                    <span id="gameVoiceParticipantsCount">0</span>
                 </div>
             </div>
 

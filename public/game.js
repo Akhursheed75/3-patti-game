@@ -1,3 +1,284 @@
+// Voice Chat Class using WebRTC
+class VoiceChat {
+    constructor(socket) {
+        this.socket = socket;
+        this.localStream = null;
+        this.peerConnections = new Map();
+        this.isMuted = false;
+        this.isConnected = false;
+        this.roomCode = null;
+        
+        // WebRTC configuration
+        this.rtcConfig = {
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' }
+            ]
+        };
+        
+        this.initializeSocketListeners();
+    }
+    
+    async initialize() {
+        try {
+            // Request microphone access
+            this.localStream = await navigator.mediaDevices.getUserMedia({ 
+                audio: true,
+                video: false
+            });
+            
+            this.isConnected = true;
+            console.log('Voice chat initialized successfully');
+            return true;
+        } catch (error) {
+            console.error('Failed to initialize voice chat:', error);
+            this.showToast('Microphone access denied. Voice chat unavailable.', 'error');
+            return false;
+        }
+    }
+    
+    joinRoom(roomCode) {
+        this.roomCode = roomCode;
+        this.socket.emit('voice:join-room', { roomCode });
+        console.log('Joined voice room:', roomCode);
+    }
+    
+    leaveRoom() {
+        if (this.roomCode) {
+            this.socket.emit('voice:leave-room', { roomCode: this.roomCode });
+            this.roomCode = null;
+        }
+        
+        // Close all peer connections
+        this.peerConnections.forEach(connection => {
+            connection.close();
+        });
+        this.peerConnections.clear();
+        
+        this.isConnected = false;
+        console.log('Left voice room');
+    }
+    
+    toggleMute() {
+        if (!this.localStream) return;
+        
+        this.isMuted = !this.isMuted;
+        this.localStream.getAudioTracks().forEach(track => {
+            track.enabled = !this.isMuted;
+        });
+        
+        // Update UI
+        this.updateMuteButton();
+        
+        console.log('Microphone:', this.isMuted ? 'Muted' : 'Unmuted');
+    }
+    
+    updateMuteButton() {
+        const lobbyBtn = document.getElementById('toggleMicBtn');
+        const gameBtn = document.getElementById('gameToggleMicBtn');
+        
+        if (lobbyBtn) {
+            lobbyBtn.textContent = this.isMuted ? '🔇 Unmute' : '🎤 Mute';
+            lobbyBtn.classList.toggle('muted', this.isMuted);
+        }
+        
+        if (gameBtn) {
+            gameBtn.textContent = this.isMuted ? '🔇 Unmute' : '🎤 Mute';
+            gameBtn.classList.toggle('muted', this.isMuted);
+        }
+    }
+    
+    async createPeerConnection(peerSocketId) {
+        if (this.peerConnections.has(peerSocketId)) {
+            return this.peerConnections.get(peerSocketId);
+        }
+        
+        const peerConnection = new RTCPeerConnection(this.rtcConfig);
+        
+        // Add local stream tracks
+        if (this.localStream) {
+            this.localStream.getTracks().forEach(track => {
+                peerConnection.addTrack(track, this.localStream);
+            });
+        }
+        
+        // Handle incoming audio
+        peerConnection.ontrack = (event) => {
+            const audioElement = document.createElement('audio');
+            audioElement.srcObject = event.streams[0];
+            audioElement.autoplay = true;
+            audioElement.volume = 0.7; // Set volume to 70%
+            
+            // Store audio element for cleanup
+            peerConnection.audioElement = audioElement;
+            
+            // Add to DOM (hidden)
+            audioElement.style.display = 'none';
+            document.body.appendChild(audioElement);
+            
+            console.log('Audio stream received from peer:', peerSocketId);
+        };
+        
+        // Handle ICE candidates
+        peerConnection.onicecandidate = (event) => {
+            if (event.candidate) {
+                this.socket.emit('voice:ice-candidate', {
+                    targetSocketId: peerSocketId,
+                    candidate: event.candidate
+                });
+            }
+        };
+        
+        // Handle connection state changes
+        peerConnection.onconnectionstatechange = () => {
+            console.log('Peer connection state:', peerSocketId, peerConnection.connectionState);
+        };
+        
+        this.peerConnections.set(peerSocketId, peerConnection);
+        return peerConnection;
+    }
+    
+    async handleOffer(offer, fromSocketId) {
+        try {
+            const peerConnection = await this.createPeerConnection(fromSocketId);
+            
+            await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+            const answer = await peerConnection.createAnswer();
+            await peerConnection.setLocalDescription(answer);
+            
+            this.socket.emit('voice:answer', {
+                targetSocketId: fromSocketId,
+                answer: answer
+            });
+            
+            console.log('Handled offer from:', fromSocketId);
+        } catch (error) {
+            console.error('Error handling offer:', error);
+        }
+    }
+    
+    async handleAnswer(answer, fromSocketId) {
+        try {
+            const peerConnection = this.peerConnections.get(fromSocketId);
+            if (peerConnection) {
+                await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+                console.log('Handled answer from:', fromSocketId);
+            }
+        } catch (error) {
+            console.error('Error handling answer:', error);
+        }
+    }
+    
+    async handleIceCandidate(candidate, fromSocketId) {
+        try {
+            const peerConnection = this.peerConnections.get(fromSocketId);
+            if (peerConnection) {
+                await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+                console.log('Added ICE candidate from:', fromSocketId);
+            }
+        } catch (error) {
+            console.error('Error handling ICE candidate:', error);
+        }
+    }
+    
+    async connectToPeer(peerSocketId) {
+        try {
+            const peerConnection = await this.createPeerConnection(peerSocketId);
+            
+            const offer = await peerConnection.createOffer();
+            await peerConnection.setLocalDescription(offer);
+            
+            this.socket.emit('voice:offer', {
+                targetSocketId: peerSocketId,
+                offer: offer
+            });
+            
+            console.log('Sent offer to peer:', peerSocketId);
+        } catch (error) {
+            console.error('Error connecting to peer:', error);
+        }
+    }
+    
+    updateParticipantsCount(count) {
+        const lobbyCount = document.getElementById('voiceParticipantsCount');
+        const gameCount = document.getElementById('gameVoiceParticipantsCount');
+        
+        if (lobbyCount) {
+            lobbyCount.textContent = count;
+        }
+        
+        if (gameCount) {
+            gameCount.textContent = count;
+        }
+    }
+    
+    showToast(message, type = 'info') {
+        // Create toast notification
+        const toast = document.createElement('div');
+        toast.className = `toast ${type}`;
+        toast.textContent = message;
+        document.body.appendChild(toast);
+        
+        // Remove after 3 seconds
+        setTimeout(() => {
+            if (toast.parentNode) {
+                toast.parentNode.removeChild(toast);
+            }
+        }, 3000);
+    }
+    
+    initializeSocketListeners() {
+        // Handle incoming offers
+        this.socket.on('voice:offer', (data) => {
+            this.handleOffer(data.offer, data.fromSocketId);
+        });
+        
+        // Handle incoming answers
+        this.socket.on('voice:answer', (data) => {
+            this.handleAnswer(data.answer, data.fromSocketId);
+        });
+        
+        // Handle incoming ICE candidates
+        this.socket.on('voice:ice-candidate', (data) => {
+            this.handleIceCandidate(data.candidate, data.fromSocketId);
+        });
+        
+        // Handle new voice participants
+        this.socket.on('voice:user-joined', (data) => {
+            console.log('New voice participant joined:', data.socketId);
+            this.connectToPeer(data.socketId);
+        });
+        
+        // Handle existing participants when joining
+        this.socket.on('voice:existing-participants', (data) => {
+            console.log('Existing voice participants:', data.participants);
+            data.participants.forEach(peerSocketId => {
+                this.connectToPeer(peerSocketId);
+            });
+            this.updateParticipantsCount(data.participants.length + 1);
+        });
+        
+        // Handle participants leaving
+        this.socket.on('voice:user-left', (data) => {
+            console.log('Voice participant left:', data.socketId);
+            const peerConnection = this.peerConnections.get(data.socketId);
+            if (peerConnection) {
+                peerConnection.close();
+                this.peerConnections.delete(data.socketId);
+                
+                // Remove audio element
+                if (peerConnection.audioElement) {
+                    peerConnection.audioElement.remove();
+                }
+            }
+            
+            // Update count
+            const currentCount = Math.max(0, this.peerConnections.size + 1);
+            this.updateParticipantsCount(currentCount);
+        });
+    }
+}
+
 // Game Client - Main JavaScript File
 class CardGame {
     constructor() {
@@ -25,6 +306,9 @@ class CardGame {
         this.isSelectingBlindForCard2 = false;
         this.selectedBlindCardIndex = null;
         
+        // Initialize voice chat
+        this.voiceChat = new VoiceChat(this.socket);
+        
         console.log('Socket connected:', this.socket.connected);
         this.socket.on('connect', () => {
             console.log('Socket connected successfully');
@@ -36,6 +320,7 @@ class CardGame {
         
         this.initializeEventListeners();
         this.initializeSocketListeners();
+        this.initializePageVisibilityHandling();
         this.showScreen('mainMenu');
     }
 
@@ -58,6 +343,10 @@ class CardGame {
         // Game
         document.getElementById('takeCardsBtn').addEventListener('click', () => this.takeTableCards());
         // Play cards button - dynamic onclick handler set in updatePlayCardsButton()
+        
+        // Voice Chat
+        document.getElementById('toggleMicBtn').addEventListener('click', () => this.voiceChat.toggleMute());
+        document.getElementById('gameToggleMicBtn').addEventListener('click', () => this.voiceChat.toggleMute());
         
         // Modals
         document.getElementById('closeErrorBtn').addEventListener('click', () => this.closeModal('errorModal'));
@@ -85,19 +374,26 @@ class CardGame {
     // Initialize Socket.IO event listeners
     initializeSocketListeners() {
         console.log('Setting up socket listeners');
-        this.socket.on('roomCreated', (data) => {
+        this.socket.on('roomCreated', async (data) => {
             console.log('Room created event received:', data);
             this.roomCode = data.roomCode;
             this.playerId = data.player.id;
             this.playerName = data.player.name;
             this.isRoomCreator = true;
+            
+            // Initialize voice chat when room is created
+            await this.initializeVoiceChat();
+            
             this.updateLobby(data);
             this.showScreen('lobby');
         });
 
-        this.socket.on('roomJoined', (data) => {
+        this.socket.on('roomJoined', async (data) => {
             console.log('Room joined event received:', data);
             this.roomCode = data.roomCode;
+            
+            // Initialize voice chat when joining a room
+            await this.initializeVoiceChat();
             this.playerId = data.player.id;
             this.playerName = data.player.name;
             this.isRoomCreator = false;
@@ -125,6 +421,14 @@ class CardGame {
             if (data.initialDiscard) {
                 this.gameState.tableCards = [data.initialDiscard];
             }
+            
+            // Ensure voice chat is active when game starts
+            if (this.voiceChat && !this.voiceChat.isConnected) {
+                this.voiceChat.initialize().then(() => {
+                    this.voiceChat.joinRoom(this.roomCode);
+                });
+            }
+            
             this.updateGameScreen();
             this.showScreen('gameScreen');
         });
@@ -178,6 +482,9 @@ class CardGame {
         });
 
         this.socket.on('gameEnded', (data) => {
+            // Leave voice chat room when game ends
+            this.voiceChat.leaveRoom();
+            
             document.getElementById('winnerName').textContent = data.winner;
             this.showScreen('gameOverScreen');
         });
@@ -214,6 +521,13 @@ class CardGame {
                     playerName: this.playerName,
                     playerId: this.playerId
                 });
+                
+                // Reinitialize voice chat on reconnection
+                if (this.voiceChat) {
+                    this.voiceChat.initialize().then(() => {
+                        this.voiceChat.joinRoom(this.roomCode);
+                    });
+                }
             }
         });
 
@@ -406,7 +720,43 @@ class CardGame {
         this.socket.emit('startGame');
     }
 
+    async initializeVoiceChat() {
+        try {
+            const success = await this.voiceChat.initialize();
+            if (success) {
+                this.voiceChat.joinRoom(this.roomCode);
+                console.log('Voice chat joined room:', this.roomCode);
+            }
+        } catch (error) {
+            console.error('Failed to initialize voice chat:', error);
+        }
+    }
+    
+    initializePageVisibilityHandling() {
+        // Handle page visibility changes to pause/resume voice chat
+        document.addEventListener('visibilitychange', () => {
+            if (this.voiceChat && this.voiceChat.localStream) {
+                if (document.hidden) {
+                    // Page is hidden, pause voice chat
+                    this.voiceChat.localStream.getAudioTracks().forEach(track => {
+                        track.enabled = false;
+                    });
+                } else {
+                    // Page is visible, resume voice chat if not muted
+                    if (!this.voiceChat.isMuted) {
+                        this.voiceChat.localStream.getAudioTracks().forEach(track => {
+                            track.enabled = true;
+                        });
+                    }
+                }
+            }
+        });
+    }
+    
     leaveLobby() {
+        // Leave voice chat room
+        this.voiceChat.leaveRoom();
+        
         this.socket.disconnect();
         location.reload();
     }
@@ -914,6 +1264,9 @@ class CardGame {
     }
 
     newGame() {
+        // Leave voice chat room
+        this.voiceChat.leaveRoom();
+        
         this.socket.disconnect();
         location.reload();
     }

@@ -20,6 +20,10 @@ app.use(express.static(path.join(__dirname, 'public')));
 const gameRooms = new Map();
 const playerSockets = new Map();
 
+// Voice chat state storage
+const voiceConnections = new Map(); // roomCode -> Set of socket IDs
+const peerConnections = new Map(); // socketId -> Map of peer connections
+
 // Generate 6-digit game code
 function generateGameCode() {
   return Math.random().toString(36).substr(2, 6).toUpperCase();
@@ -738,10 +742,90 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Voice Chat WebRTC Signaling Events
+  socket.on('voice:offer', (data) => {
+    const { targetSocketId, offer } = data;
+    socket.to(targetSocketId).emit('voice:offer', {
+      offer,
+      fromSocketId: socket.id
+    });
+  });
+
+  socket.on('voice:answer', (data) => {
+    const { targetSocketId, answer } = data;
+    socket.to(targetSocketId).emit('voice:answer', {
+      answer,
+      fromSocketId: socket.id
+    });
+  });
+
+  socket.on('voice:ice-candidate', (data) => {
+    const { targetSocketId, candidate } = data;
+    socket.to(targetSocketId).emit('voice:ice-candidate', {
+      candidate,
+      fromSocketId: socket.id
+    });
+  });
+
+  socket.on('voice:join-room', (data) => {
+    const { roomCode } = data;
+    
+    // Initialize voice connections for this room if it doesn't exist
+    if (!voiceConnections.has(roomCode)) {
+      voiceConnections.set(roomCode, new Set());
+    }
+    
+    voiceConnections.get(roomCode).add(socket.id);
+    
+    // Notify other players in the room about the new voice participant
+    socket.to(roomCode).emit('voice:user-joined', { socketId: socket.id });
+    
+    // Send list of existing voice participants to the new user
+    const existingParticipants = Array.from(voiceConnections.get(roomCode))
+      .filter(id => id !== socket.id);
+    
+    socket.emit('voice:existing-participants', { participants: existingParticipants });
+  });
+
+  socket.on('voice:leave-room', (data) => {
+    const { roomCode } = data;
+    
+    if (voiceConnections.has(roomCode)) {
+      voiceConnections.get(roomCode).delete(socket.id);
+      
+      // Clean up empty rooms
+      if (voiceConnections.get(roomCode).size === 0) {
+        voiceConnections.delete(roomCode);
+      }
+    }
+    
+    // Clean up peer connections
+    if (peerConnections.has(socket.id)) {
+      peerConnections.delete(socket.id);
+    }
+    
+    // Notify other players
+    socket.to(roomCode).emit('voice:user-left', { socketId: socket.id });
+  });
+
   socket.on('disconnect', () => {
     console.log('Client disconnected:', socket.id);
     
+    // Clean up voice connections
     const roomCode = playerSockets.get(socket.id);
+    if (roomCode && voiceConnections.has(roomCode)) {
+      voiceConnections.get(roomCode).delete(socket.id);
+      
+      if (voiceConnections.get(roomCode).size === 0) {
+        voiceConnections.delete(roomCode);
+      }
+    }
+    
+    // Clean up peer connections
+    if (peerConnections.has(socket.id)) {
+      peerConnections.delete(socket.id);
+    }
+    
     if (roomCode) {
       const gameState = gameRooms.get(roomCode);
       if (gameState) {
