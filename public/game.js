@@ -19,20 +19,84 @@ class VoiceChat {
         this.initializeSocketListeners();
     }
     
+    async checkMicrophonePermission() {
+        try {
+            const result = await navigator.permissions.query({ name: 'microphone' });
+            console.log('Microphone permission state:', result.state);
+            
+            if (result.state === 'granted') {
+                this.showToast('Microphone access already granted!', 'success');
+                return true; // Permission granted
+            } else if (result.state === 'denied') {
+                this.showToast('Microphone access denied. Please enable it in browser settings.', 'error');
+                return false; // Permission denied
+            } else {
+                // Permission state is 'prompt'
+                return null; // Need to prompt user
+            }
+        } catch (error) {
+            console.log('Permission API not supported, will prompt user');
+            return null; // Permission state unknown
+        }
+    }
+    
     async initialize() {
         try {
-            // Request microphone access
+            // Check if getUserMedia is supported
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                this.showToast('Your browser does not support microphone access. Please use a modern browser like Chrome, Firefox, or Edge.', 'error');
+                return false;
+            }
+
+            // Check if we're on HTTPS or localhost (required for getUserMedia)
+            if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+                this.showToast('Microphone access requires HTTPS or localhost. Please use HTTPS or run locally.', 'error');
+                return false;
+            }
+
+            // Check current permission state
+            const permissionState = await this.checkMicrophonePermission();
+            if (permissionState === false) {
+                return false; // Permission denied
+            }
+
+            // Request microphone access with better error handling
             this.localStream = await navigator.mediaDevices.getUserMedia({ 
-                audio: true,
+                audio: {
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: true
+                },
                 video: false
             });
             
             this.isConnected = true;
             console.log('Voice chat initialized successfully');
+            this.showToast('Microphone access granted! Voice chat is now active.', 'success');
+            
+            // Update UI to show mute/unmute buttons
+            this.updateMuteButton();
+            
             return true;
         } catch (error) {
             console.error('Failed to initialize voice chat:', error);
-            this.showToast('Microphone access denied. Voice chat unavailable.', 'error');
+            
+            // Provide specific error messages for common issues
+            let errorMessage = 'Microphone access denied. ';
+            
+            if (error.name === 'NotAllowedError') {
+                errorMessage += 'Please allow microphone access in your browser settings and refresh the page.';
+            } else if (error.name === 'NotFoundError') {
+                errorMessage += 'No microphone found. Please connect a microphone and try again.';
+            } else if (error.name === 'NotReadableError') {
+                errorMessage += 'Microphone is already in use by another application.';
+            } else if (error.name === 'SecurityError') {
+                errorMessage += 'Microphone access blocked due to security restrictions. Try using HTTPS.';
+            } else {
+                errorMessage += 'Please check your microphone permissions and try again.';
+            }
+            
+            this.showToast(errorMessage, 'error');
             return false;
         }
     }
@@ -76,15 +140,29 @@ class VoiceChat {
     updateMuteButton() {
         const lobbyBtn = document.getElementById('toggleMicBtn');
         const gameBtn = document.getElementById('gameToggleMicBtn');
+        const lobbyRequestBtn = document.getElementById('requestMicBtn');
+        const gameRequestBtn = document.getElementById('gameRequestMicBtn');
         
-        if (lobbyBtn) {
-            lobbyBtn.textContent = this.isMuted ? '🔇 Unmute' : '🎤 Mute';
-            lobbyBtn.classList.toggle('muted', this.isMuted);
-        }
-        
-        if (gameBtn) {
-            gameBtn.textContent = this.isMuted ? '🔇 Unmute' : '🎤 Mute';
-            gameBtn.classList.toggle('muted', this.isMuted);
+        if (this.isConnected && this.localStream) {
+            // Show mute/unmute buttons, hide request buttons
+            if (lobbyBtn) {
+                lobbyBtn.style.display = 'inline-flex';
+                lobbyBtn.textContent = this.isMuted ? '🔇 Unmute' : '🎤 Mute';
+                lobbyBtn.classList.toggle('muted', this.isMuted);
+            }
+            if (gameBtn) {
+                gameBtn.style.display = 'inline-flex';
+                gameBtn.textContent = this.isMuted ? '🔇 Unmute' : '🎤 Mute';
+                gameBtn.classList.toggle('muted', this.isMuted);
+            }
+            if (lobbyRequestBtn) lobbyRequestBtn.style.display = 'none';
+            if (gameRequestBtn) gameRequestBtn.style.display = 'none';
+        } else {
+            // Show request buttons, hide mute/unmute buttons
+            if (lobbyBtn) lobbyBtn.style.display = 'none';
+            if (gameBtn) gameBtn.style.display = 'none';
+            if (lobbyRequestBtn) lobbyRequestBtn.style.display = 'inline-flex';
+            if (gameRequestBtn) gameRequestBtn.style.display = 'inline-flex';
         }
     }
     
@@ -347,6 +425,8 @@ class CardGame {
         // Voice Chat
         document.getElementById('toggleMicBtn').addEventListener('click', () => this.voiceChat.toggleMute());
         document.getElementById('gameToggleMicBtn').addEventListener('click', () => this.voiceChat.toggleMute());
+        document.getElementById('requestMicBtn').addEventListener('click', () => this.voiceChat.initialize());
+        document.getElementById('gameRequestMicBtn').addEventListener('click', () => this.voiceChat.initialize());
         
         // Modals
         document.getElementById('closeErrorBtn').addEventListener('click', () => this.closeModal('errorModal'));

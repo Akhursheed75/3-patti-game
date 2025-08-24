@@ -899,6 +899,32 @@ input[type="text"]:focus {
     box-shadow: 0 4px 12px rgba(244, 67, 54, 0.3);
 }
 
+.btn-voice.request-mic {
+    background: linear-gradient(135deg, #2196F3, #1976D2);
+    animation: voicePulse 2s infinite;
+}
+
+.btn-voice.request-mic:hover {
+    background: linear-gradient(135deg, #1976D2, #1565C0);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(33, 150, 243, 0.3);
+}
+
+.voice-chat-help {
+    text-align: center;
+    margin: 10px 0;
+    padding: 10px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.voice-chat-help p {
+    margin: 0;
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 0.85rem;
+}
+
 .voice-participants {
     font-size: 0.9rem;
     color: rgba(255, 255, 255, 0.8);

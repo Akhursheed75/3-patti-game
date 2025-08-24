@@ -63,12 +63,19 @@
                 <div class="voice-status">
                     <span id="voiceStatus">🎤 Voice Chat</span>
                 </div>
-                <button id="toggleMicBtn" class="btn btn-voice" title="Toggle Microphone">
+                <button id="toggleMicBtn" class="btn btn-voice" title="Toggle Microphone" style="display: none;">
                     🎤 Mute
+                </button>
+                <button id="requestMicBtn" class="btn btn-voice request-mic" title="Enable Microphone">
+                    🎤 Enable Voice Chat
                 </button>
                 <div class="voice-participants">
                     <span id="voiceParticipantsCount">0</span> players connected
                 </div>
+            </div>
+            
+            <div class="voice-chat-help">
+                <p><small>💡 <strong>Voice Chat Setup:</strong> Click "Enable Voice Chat" to start. Allow microphone access when prompted.</small></p>
             </div>
             
             <div id="waitingMessage" class="waiting-message" style="display: none;">
@@ -102,8 +109,11 @@
                 </div>
                 <!-- Voice Chat Controls -->
                 <div class="voice-chat-controls game-voice">
-                    <button id="gameToggleMicBtn" class="btn btn-voice" title="Toggle Microphone">
+                    <button id="gameToggleMicBtn" class="btn btn-voice" title="Toggle Microphone" style="display: none;">
                         🎤 Mute
+                    </button>
+                    <button id="gameRequestMicBtn" class="btn btn-voice request-mic" title="Enable Microphone">
+                        🎤 Enable Voice Chat
                     </button>
                     <span id="gameVoiceParticipantsCount">0</span>
                 </div>
