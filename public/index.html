@@ -3,204 +3,330 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3 Patti Power Play</title>
-    <link rel="stylesheet" href="styles.css">
+    <title>3 Patti Power Play - Casino Edition</title>
+    <script src="https://cdn.tailwindcss.com"></script>
     <script src="/socket.io/socket.io.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    animation: {
+                        'glow': 'glow 2s ease-in-out infinite alternate',
+                        'float': 'float 3s ease-in-out infinite',
+                        'deal': 'deal 0.5s ease-out',
+                        'reveal': 'reveal 0.6s ease-out',
+                        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                    },
+                    keyframes: {
+                        glow: {
+                            '0%': { boxShadow: '0 0 20px rgba(59, 130, 246, 0.5)' },
+                            '100%': { boxShadow: '0 0 30px rgba(59, 130, 246, 0.8), 0 0 40px rgba(59, 130, 246, 0.6)' }
+                        },
+                        float: {
+                            '0%, 100%': { transform: 'translateY(0px)' },
+                            '50%': { transform: 'translateY(-10px)' }
+                        },
+                        deal: {
+                            '0%': { transform: 'scale(0.8) rotate(-180deg)', opacity: '0' },
+                            '100%': { transform: 'scale(1) rotate(0deg)', opacity: '1' }
+                        },
+                        reveal: {
+                            '0%': { transform: 'rotateY(90deg)', opacity: '0' },
+                            '100%': { transform: 'rotateY(0deg)', opacity: '1' }
+                        }
+                    }
+                }
+            }
+        }
+    </script>
 </head>
-<body>
+<body class="bg-gradient-to-br from-gray-900 via-blue-900 to-purple-900 min-h-screen text-white overflow-x-hidden">
     <!-- Main Menu Screen -->
-    <div id="mainMenu" class="screen active">
-        <div class="container">
-            <div class="game-logo">
-                <h1>🎴 3 Patti Power Play</h1>
-                <div class="logo-sparkle">✨</div>
+    <div id="mainMenu" class="screen active fixed inset-0 z-50 flex items-center justify-center">
+        <div class="absolute inset-0 bg-black bg-opacity-50"></div>
+        <div class="relative z-10 text-center max-w-md mx-auto p-8">
+            <!-- Casino Logo -->
+            <div class="mb-12 animate-float">
+                <div class="text-8xl mb-4">🎰</div>
+                <h1 class="text-5xl font-bold bg-gradient-to-r from-yellow-400 via-red-500 to-pink-500 bg-clip-text text-transparent mb-2">
+                    3 Patti Power Play
+                </h1>
+                <div class="text-xl text-blue-300 font-light">Casino Edition</div>
             </div>
-            <p class="subtitle">Strategic Card Combat Game</p>
             
-            <div class="menu-options">
-                <div class="input-group">
-                    <input type="text" id="playerName" placeholder="Enter your name" maxlength="15">
+            <!-- Menu Form -->
+            <div class="space-y-6">
+                <div class="relative">
+                    <input type="text" id="playerName" 
+                           placeholder="Enter your name" maxlength="15"
+                           class="w-full px-6 py-4 bg-gray-800 border-2 border-blue-500 rounded-2xl text-white placeholder-gray-400 focus:border-blue-400 focus:outline-none focus:ring-4 focus:ring-blue-500 focus:ring-opacity-50 transition-all duration-300 text-lg">
                 </div>
                 
-                <button id="createRoomBtn" class="btn btn-primary">Create New Game</button>
+                <button id="createRoomBtn" 
+                        class="w-full px-8 py-4 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-bold text-xl rounded-2xl transform hover:scale-105 hover:shadow-2xl transition-all duration-300 shadow-lg">
+                    🎮 Create New Game
+                </button>
                 
-                <div class="or-divider">
-                    <span>OR</span>
+                <div class="relative">
+                    <div class="absolute inset-0 flex items-center">
+                        <div class="w-full border-t border-gray-600"></div>
+                    </div>
+                    <div class="relative flex justify-center text-sm">
+                        <span class="px-4 bg-gradient-to-br from-gray-900 via-blue-900 to-purple-900 text-gray-400">OR</span>
+                    </div>
                 </div>
                 
-                <div class="input-group">
-                    <input type="text" id="roomCode" placeholder="Enter game code" maxlength="6">
+                <div class="relative">
+                    <input type="text" id="roomCode" 
+                           placeholder="Enter game code" maxlength="6"
+                           class="w-full px-6 py-4 bg-gray-800 border-2 border-purple-500 rounded-2xl text-white placeholder-gray-400 focus:border-purple-400 focus:outline-none focus:ring-4 focus:ring-purple-500 focus:ring-opacity-50 transition-all duration-300 text-lg uppercase">
                 </div>
-                <button id="joinRoomBtn" class="btn btn-secondary">Join Game</button>
+                
+                <button id="joinRoomBtn" 
+                        class="w-full px-8 py-4 bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 text-white font-bold text-xl rounded-2xl transform hover:scale-105 hover:shadow-2xl transition-all duration-300 shadow-lg">
+                    🚀 Join Game
+                </button>
             </div>
         </div>
     </div>
 
     <!-- Lobby Screen -->
-    <div id="lobby" class="screen">
-        <div class="container">
-            <div class="lobby-header">
-                <h2>Game Lobby</h2>
-                <div class="room-code">
-                    Code: <span id="currentRoomCode"></span>
-                    <button id="copyCodeBtn" class="btn-small">Copy</button>
+    <div id="lobby" class="screen fixed inset-0 z-40 bg-gradient-to-br from-gray-900 via-blue-900 to-purple-900">
+        <div class="container mx-auto px-4 py-8 h-full flex flex-col">
+            <!-- Lobby Header -->
+            <div class="text-center mb-8">
+                <h2 class="text-4xl font-bold text-yellow-400 mb-4">🎯 Game Lobby</h2>
+                <div class="inline-flex items-center bg-gray-800 rounded-2xl px-6 py-3 border-2 border-blue-500">
+                    <span class="text-blue-300 mr-3">Room Code:</span>
+                    <span id="currentRoomCode" class="text-2xl font-mono font-bold text-white mr-4"></span>
+                    <button id="copyCodeBtn" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-xl transition-colors duration-200">
+                        📋 Copy
+                    </button>
                 </div>
             </div>
             
-            <div class="players-list">
-                <h3>Players (<span id="playerCount">0</span>/6)</h3>
-                <div id="playersList"></div>
+            <!-- Players List -->
+            <div class="flex-1 bg-gray-800 bg-opacity-50 rounded-3xl p-6 mb-6 backdrop-blur-sm border border-gray-700">
+                <h3 class="text-2xl font-bold text-center mb-6 text-blue-300">
+                    Players (<span id="playerCount">0</span>/6)
+                </h3>
+                <div id="playersList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
             </div>
             
-            <div class="lobby-actions">
-                <button id="readyBtn" class="btn btn-primary">Ready</button>
-                <button id="startGameBtn" class="btn btn-success" style="display: none;">Start Game</button>
-                <button id="leaveLobbyBtn" class="btn btn-secondary">Leave</button>
+            <!-- Lobby Actions -->
+            <div class="flex flex-col sm:flex-row gap-4 justify-center mb-8">
+                <button id="readyBtn" 
+                        class="px-8 py-4 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-bold text-xl rounded-2xl transform hover:scale-105 transition-all duration-300 shadow-lg">
+                    ✅ Ready
+                </button>
+                <button id="startGameBtn" 
+                        class="px-8 py-4 bg-gradient-to-r from-yellow-500 to-orange-600 hover:from-yellow-600 hover:to-orange-700 text-white font-bold text-xl rounded-2xl transform hover:scale-105 transition-all duration-300 shadow-lg hidden">
+                    🚀 Start Game
+                </button>
+                <button id="leaveLobbyBtn" 
+                        class="px-8 py-4 bg-gradient-to-r from-red-500 to-pink-600 hover:from-red-600 hover:to-pink-700 text-white font-bold text-xl rounded-2xl transform hover:scale-105 transition-all duration-300 shadow-lg">
+                    ❌ Leave
+                </button>
             </div>
             
             <!-- Voice Chat Controls -->
-            <div class="voice-chat-controls">
-                <div class="voice-status">
-                    <span id="voiceStatus">🎤 Voice Chat</span>
+            <div class="bg-gray-800 bg-opacity-50 rounded-3xl p-6 backdrop-blur-sm border border-gray-700 mb-6">
+                <div class="flex flex-col sm:flex-row items-center justify-between gap-4">
+                    <div class="flex items-center gap-4">
+                        <div class="text-2xl">🎤</div>
+                        <div class="text-center sm:text-left">
+                            <div class="text-lg font-semibold text-blue-300">Voice Chat</div>
+                            <div class="text-sm text-gray-400">Real-time communication</div>
+                        </div>
+                    </div>
+                    
+                    <div class="flex items-center gap-4">
+                        <button id="toggleMicBtn" class="hidden px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-bold rounded-xl transition-all duration-300 transform hover:scale-105">
+                            🎤 Mute
+                        </button>
+                        <button id="requestMicBtn" class="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-bold rounded-xl transition-all duration-300 transform hover:scale-105 animate-pulse-slow">
+                            🎤 Enable Voice Chat
+                        </button>
+                        <div class="text-center">
+                            <div class="text-2xl font-bold text-yellow-400" id="voiceParticipantsCount">0</div>
+                            <div class="text-sm text-gray-400">Connected</div>
+                        </div>
+                    </div>
                 </div>
-                <button id="toggleMicBtn" class="btn btn-voice" title="Toggle Microphone" style="display: none;">
-                    🎤 Mute
-                </button>
-                <button id="requestMicBtn" class="btn btn-voice request-mic" title="Enable Microphone">
-                    🎤 Enable Voice Chat
-                </button>
-                <div class="voice-participants">
-                    <span id="voiceParticipantsCount">0</span> players connected
+                
+                <div class="mt-4 text-center text-sm text-gray-400">
+                    💡 Click "Enable Voice Chat" to start. Allow microphone access when prompted.
                 </div>
             </div>
             
-            <div class="voice-chat-help">
-                <p><small>💡 <strong>Voice Chat Setup:</strong> Click "Enable Voice Chat" to start. Allow microphone access when prompted.</small></p>
-            </div>
-            
-            <div id="waitingMessage" class="waiting-message" style="display: none;">
+            <!-- Waiting Message -->
+            <div id="waitingMessage" class="text-center text-xl text-blue-300 hidden">
                 Waiting for more players or all players to be ready...
-            </div>
-            
-            <div class="game-info">
-                <p><strong>3 Patti Power Play:</strong></p>
-                <ul>
-                    <li>2-6 players required to start</li>
-                    <li>3 hand cards (open) + 3 blind cards per player</li>
-                    <li>Match numbers or play higher</li>
-                    <li>Special cards: 2 (wild+extra), 7 (back), 8 (skip), 10 (clear)</li>
-                    <li>Draw only when ≤3 total cards</li>
-                    <li>Play blind cards when hand is empty</li>
-                </ul>
             </div>
         </div>
     </div>
 
     <!-- Game Screen -->
-    <div id="gameScreen" class="screen">
-        <div class="game-container">
-            <!-- Game Header -->
-            <div class="game-header">
-                <div class="current-player">
-                    <span id="currentPlayerName">Player's Turn</span>
+    <div id="gameScreen" class="screen fixed inset-0 z-30 bg-gradient-to-br from-gray-900 via-blue-900 to-purple-900">
+        <!-- Game Table Container -->
+        <div class="relative w-full h-full flex items-center justify-center p-4">
+            <!-- Central Game Table -->
+            <div class="relative w-96 h-96 md:w-[500px] md:h-[500px] lg:w-[600px] lg:h-[600px]">
+                <!-- Table Background -->
+                <div class="absolute inset-0 bg-gradient-to-br from-green-800 to-green-900 rounded-full border-8 border-yellow-600 shadow-2xl animate-glow"></div>
+                
+                <!-- Table Center -->
+                <div class="absolute inset-8 bg-gradient-to-br from-green-700 to-green-800 rounded-full border-4 border-yellow-500 flex items-center justify-center">
+                    <!-- Table Cards Display -->
+                    <div id="tableCards" class="text-center">
+                        <div class="text-2xl md:text-3xl font-bold text-yellow-400 mb-2">🎰</div>
+                        <div class="text-lg md:text-xl text-white font-semibold">Game Table</div>
+                    </div>
                 </div>
-                <div class="deck-info">
-                    <span>Deck: <span id="deckCount">52</span></span>
+                
+                <!-- Player Positions Around Table -->
+                <div id="playerPositions" class="absolute inset-0">
+                    <!-- Player positions will be dynamically positioned here -->
                 </div>
-                <!-- Voice Chat Controls -->
-                <div class="voice-chat-controls game-voice">
-                    <button id="gameToggleMicBtn" class="btn btn-voice" title="Toggle Microphone" style="display: none;">
+            </div>
+            
+            <!-- Game Controls -->
+            <div class="absolute bottom-8 left-1/2 transform -translate-x-1/2">
+                <div class="flex flex-col sm:flex-row gap-4">
+                    <button id="takeCardsBtn" class="hidden px-8 py-4 bg-gradient-to-r from-orange-500 to-red-600 hover:from-orange-600 hover:to-red-700 text-white font-bold text-xl rounded-2xl transform hover:scale-105 transition-all duration-300 shadow-lg">
+                        🃏 Pick Up Pile
+                    </button>
+                    <button id="playCardsBtn" class="hidden px-8 py-4 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-bold text-xl rounded-2xl transform hover:scale-105 transition-all duration-300 shadow-lg">
+                        🎯 Play Cards
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Voice Chat Controls (Game) -->
+            <div class="absolute top-8 right-8">
+                <div class="flex items-center gap-4">
+                    <button id="gameToggleMicBtn" class="hidden px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-bold rounded-xl transition-all duration-300 transform hover:scale-105">
                         🎤 Mute
                     </button>
-                    <button id="gameRequestMicBtn" class="btn btn-voice request-mic" title="Enable Microphone">
-                        🎤 Enable Voice Chat
+                    <button id="gameRequestMicBtn" class="px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-bold rounded-xl transition-all duration-300 transform hover:scale-105 animate-pulse-slow">
+                        🎤 Enable
                     </button>
-                    <span id="gameVoiceParticipantsCount">0</span>
+                    <div class="text-center">
+                        <div class="text-lg font-bold text-yellow-400" id="gameVoiceParticipantsCount">0</div>
+                        <div class="text-xs text-gray-400">Voice</div>
+                    </div>
                 </div>
             </div>
-
-            <!-- Other Players -->
-            <div class="other-players" id="otherPlayers"></div>
-
-            <!-- Discard Pile -->
-            <div class="table-area">
-                <div class="table-cards" id="tableCards">
-                    <div class="empty-table">Discard Pile</div>
+            
+            <!-- Current Player Display -->
+            <div class="absolute top-8 left-8">
+                <div class="text-center">
+                    <div class="text-2xl font-bold text-blue-300 mb-2">Current Turn</div>
+                    <div id="currentPlayerName" class="text-xl text-white font-semibold">Waiting...</div>
                 </div>
-                <button id="takeCardsBtn" class="btn btn-warning" style="display: none;">Pick Up Pile</button>
             </div>
-
-            <!-- Current Player Area -->
-            <div class="player-area">
-                <!-- Hand Cards (3 cards initially, open/visible) -->
-                <div class="hand-cards-section" id="handCardsSection">
-                    <h4>Hand Cards (Open)</h4>
-                    <div class="hand-cards" id="handCards"></div>
-                    <button id="playCardsBtn" class="btn btn-primary" style="display: none;">Play Selected Cards</button>
+            
+            <!-- Deck Info -->
+            <div class="absolute top-8 left-1/2 transform -translate-x-1/2">
+                <div class="text-center">
+                    <div class="text-2xl font-bold text-yellow-400 mb-2">🃏</div>
+                    <div class="text-lg text-white">Deck: <span id="deckCount" class="font-bold">52</span></div>
                 </div>
-
-                <!-- Blind Cards (3 hidden cards, played without looking when hand is empty) -->
-                <div class="blind-cards-section" id="blindCardsSection">
-                    <h4>Blind Cards (<span id="blindCount">3</span>)</h4>
-                    <div class="blind-cards" id="blindCards"></div>
+            </div>
+        </div>
+        
+        <!-- Player Cards Area -->
+        <div class="absolute bottom-0 left-0 right-0 bg-gray-800 bg-opacity-90 backdrop-blur-sm border-t-2 border-gray-700 p-6">
+            <div class="max-w-6xl mx-auto">
+                <!-- Hand Cards Section -->
+                <div id="handCardsSection" class="mb-6">
+                    <h4 class="text-xl font-bold text-blue-300 mb-4 text-center">Your Hand Cards</h4>
+                    <div id="handCards" class="flex justify-center gap-2 flex-wrap"></div>
+                </div>
+                
+                <!-- Blind Cards Section -->
+                <div id="blindCardsSection" class="mb-6">
+                    <h4 class="text-xl font-bold text-purple-300 mb-4 text-center">
+                        Blind Cards (<span id="blindCount">3</span>)
+                    </h4>
+                    <div id="blindCards" class="flex justify-center gap-2 flex-wrap"></div>
                 </div>
             </div>
         </div>
     </div>
 
     <!-- Game Over Screen -->
-    <div id="gameOverScreen" class="screen">
-        <div class="container">
-            <h1>Game Over!</h1>
-            <div class="winner-announcement">
-                <h2 id="winnerName">Winner Name</h2>
-                <p>Congratulations!</p>
+    <div id="gameOverScreen" class="screen fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-75">
+        <div class="bg-gradient-to-br from-gray-800 to-gray-900 rounded-3xl p-12 text-center max-w-md mx-4 border-2 border-yellow-500 shadow-2xl">
+            <div class="text-6xl mb-6">🏆</div>
+            <h1 class="text-4xl font-bold text-yellow-400 mb-4">Game Over!</h1>
+            <div class="mb-8">
+                <h2 id="winnerName" class="text-3xl font-bold text-white mb-2">Winner Name</h2>
+                <p class="text-xl text-blue-300">Congratulations!</p>
             </div>
-            <button id="newGameBtn" class="btn btn-primary">New Game</button>
+            <button id="newGameBtn" class="px-8 py-4 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-bold text-xl rounded-2xl transform hover:scale-105 transition-all duration-300 shadow-lg">
+                🎮 New Game
+            </button>
         </div>
     </div>
 
     <!-- Error Modal -->
-    <div id="errorModal" class="modal">
-        <div class="modal-content">
-            <h3>Error</h3>
-            <p id="errorMessage"></p>
-            <button id="closeErrorBtn" class="btn btn-primary">OK</button>
+    <div id="errorModal" class="modal fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-75 hidden">
+        <div class="bg-gradient-to-br from-red-800 to-red-900 rounded-3xl p-8 text-center max-w-md mx-4 border-2 border-red-500 shadow-2xl">
+            <div class="text-4xl mb-4">⚠️</div>
+            <h3 class="text-2xl font-bold text-white mb-4">Error</h3>
+            <p id="errorMessage" class="text-lg text-red-200 mb-6"></p>
+            <button id="closeErrorBtn" class="px-6 py-3 bg-gradient-to-r from-red-500 to-pink-600 hover:from-red-600 hover:to-pink-700 text-white font-bold rounded-xl transition-all duration-300 transform hover:scale-105">
+                OK
+            </button>
         </div>
     </div>
 
     <!-- Game Rules Modal -->
-    <div id="rulesModal" class="modal">
-        <div class="modal-content">
-            <h3>Game Rules</h3>
-            <div class="rules-content">
-                <h4>3 Patti Power Play Rules:</h4>
-                <ul>
-                    <li>Each player starts with 3 hand cards (open) + 3 blind cards</li>
-                    <li>Play same number, higher number, or special cards</li>
-                    <li>Maintain minimum 3 cards while deck exists</li>
-                    <li>Can play multiple cards of same number (pairs, trips, quads)</li>
-                    <li>If you can't play, pick up the entire discard pile</li>
-                    <li>When hand is empty, play blind cards without looking</li>
-                    <li>First to discard all cards wins!</li>
-                </ul>
+    <div id="rulesModal" class="modal fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-75 hidden">
+        <div class="bg-gradient-to-br from-gray-800 to-gray-900 rounded-3xl p-8 max-w-2xl mx-4 border-2 border-blue-500 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <h3 class="text-3xl font-bold text-blue-300 mb-6 text-center">Game Rules</h3>
+            <div class="space-y-6 text-left">
+                <div>
+                    <h4 class="text-xl font-bold text-yellow-400 mb-3">3 Patti Power Play Rules:</h4>
+                    <ul class="space-y-2 text-gray-300">
+                        <li>• Each player starts with 3 hand cards (open) + 3 blind cards</li>
+                        <li>• Play same number, higher number, or special cards</li>
+                        <li>• Maintain minimum 3 cards while deck exists</li>
+                        <li>• Can play multiple cards of same number (pairs, trips, quads)</li>
+                        <li>• If you can't play, pick up the entire discard pile</li>
+                        <li>• When hand is empty, play blind cards without looking</li>
+                        <li>• First to discard all cards wins!</li>
+                    </ul>
+                </div>
                 
-                <h4>Power Cards:</h4>
-                <ul>
-                    <li><strong>2:</strong> Must be played WITH other cards (pairs, trips, etc.)</li>
-                    <li><strong>7:</strong> Turn goes back to previous player</li>
-                    <li><strong>8:</strong> Skip next player's turn</li>
-                    <li><strong>10:</strong> Clear pile - removes all cards from discard pile</li>
-                </ul>
+                <div>
+                    <h4 class="text-xl font-bold text-green-400 mb-3">Power Cards:</h4>
+                    <ul class="space-y-2 text-gray-300">
+                        <li>• <strong>2:</strong> Must be played WITH other cards (pairs, trips, etc.)</li>
+                        <li>• <strong>7:</strong> Turn goes back to previous player</li>
+                        <li>• <strong>8:</strong> Skip next player's turn</li>
+                        <li>• <strong>10:</strong> Clear pile - removes all cards from discard pile</li>
+                    </ul>
+                </div>
                 
-                <h4>Winning:</h4>
-                <p>First player to use all their cards wins!</p>
+                <div>
+                    <h4 class="text-xl font-bold text-purple-400 mb-3">Winning:</h4>
+                    <p class="text-gray-300">First player to use all their cards wins!</p>
+                </div>
             </div>
-            <button id="closeRulesBtn" class="btn btn-primary">Got it!</button>
+            <div class="text-center mt-8">
+                <button id="closeRulesBtn" class="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-bold rounded-xl transition-all duration-300 transform hover:scale-105">
+                    Got it!
+                </button>
+            </div>
         </div>
     </div>
 
-    <button id="rulesBtn" class="floating-btn">?</button>
+    <!-- Rules Button -->
+    <button id="rulesBtn" class="fixed top-8 right-8 z-40 w-16 h-16 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white text-2xl font-bold rounded-full shadow-2xl transform hover:scale-110 transition-all duration-300 animate-float">
+        ?
+    </button>
 
     <script src="game.js"></script>
 </body>

@@ -291,16 +291,45 @@ class VoiceChat {
     }
     
     showToast(message, type = 'info') {
-        // Create toast notification
+        // Remove existing toasts
+        const existingToasts = document.querySelectorAll('.toast');
+        existingToasts.forEach(toast => toast.remove());
+        
         const toast = document.createElement('div');
-        toast.className = `toast ${type}`;
+        
+        // Base classes
+        let baseClasses = 'fixed top-8 left-1/2 transform -translate-x-1/2 z-50 px-6 py-4 rounded-2xl text-white font-semibold shadow-2xl transition-all duration-300 transform translate-y-0';
+        
+        // Type-specific classes
+        switch(type) {
+            case 'success':
+                baseClasses += ' bg-gradient-to-r from-green-500 to-emerald-600 border-2 border-green-400';
+                break;
+            case 'error':
+                baseClasses += ' bg-gradient-to-r from-red-500 to-pink-600 border-2 border-red-400';
+                break;
+            case 'warning':
+                baseClasses += ' bg-gradient-to-r from-yellow-500 to-orange-600 border-2 border-yellow-400';
+                break;
+            default:
+                baseClasses += ' bg-gradient-to-r from-blue-500 to-purple-600 border-2 border-blue-400';
+        }
+        
+        toast.className = baseClasses;
         toast.textContent = message;
+        
         document.body.appendChild(toast);
+        
+        // Animate in
+        setTimeout(() => {
+            toast.style.transform = 'translateY(-20px)';
+            toast.style.opacity = '0';
+        }, 2500);
         
         // Remove after 3 seconds
         setTimeout(() => {
             if (toast.parentNode) {
-                toast.parentNode.removeChild(toast);
+                toast.remove();
             }
         }, 3000);
     }
@@ -530,7 +559,7 @@ class CardGame {
             this.selectedCards = [];
             
             this.updateGameScreen();
-            this.updateTableCards();
+            this.updateTableCardsInCenter();
             this.updateOtherPlayers();
             this.updateCurrentPlayerDisplay();
             this.updateTakeCardsButton();
@@ -550,7 +579,7 @@ class CardGame {
             this.gameState.mustThrowAfterTaking = data.mustThrowAfterTaking;
             this.gameState.playerWhoTook = data.playerWhoTook;
             this.updateGameScreen();
-            this.updateTableCards();
+            this.updateTableCardsInCenter();
             this.updateOtherPlayers();
             this.updateCurrentPlayerDisplay();
             this.updateTakeCardsButton();
@@ -661,12 +690,37 @@ class CardGame {
         existingToasts.forEach(toast => toast.remove());
         
         const toast = document.createElement('div');
-        toast.className = `toast ${type}`;
+        
+        // Base classes
+        let baseClasses = 'fixed top-8 left-1/2 transform -translate-x-1/2 z-50 px-6 py-4 rounded-2xl text-white font-semibold shadow-2xl transition-all duration-300 transform translate-y-0';
+        
+        // Type-specific classes
+        switch(type) {
+            case 'success':
+                baseClasses += ' bg-gradient-to-r from-green-500 to-emerald-600 border-2 border-green-400';
+                break;
+            case 'error':
+                baseClasses += ' bg-gradient-to-r from-red-500 to-pink-600 border-2 border-red-400';
+                break;
+            case 'warning':
+                baseClasses += ' bg-gradient-to-r from-yellow-500 to-orange-600 border-2 border-yellow-400';
+                break;
+            default:
+                baseClasses += ' bg-gradient-to-r from-blue-500 to-purple-600 border-2 border-blue-400';
+        }
+        
+        toast.className = baseClasses;
         toast.textContent = message;
         
         document.body.appendChild(toast);
         
-        // Auto remove after 3 seconds
+        // Animate in
+        setTimeout(() => {
+            toast.style.transform = 'translateY(-20px)';
+            toast.style.opacity = '0';
+        }, 2500);
+        
+        // Remove after 3 seconds
         setTimeout(() => {
             if (toast.parentNode) {
                 toast.remove();
@@ -681,10 +735,13 @@ class CardGame {
         
         const reconnectMsg = document.createElement('div');
         reconnectMsg.id = 'reconnectingMessage';
-        reconnectMsg.className = 'toast warning';
-        reconnectMsg.textContent = '🔄 Reconnecting...';
-        reconnectMsg.style.top = '70px';
-        reconnectMsg.style.animation = 'none';
+        reconnectMsg.className = 'fixed top-20 left-1/2 transform -translate-x-1/2 z-50 px-6 py-4 bg-gradient-to-r from-yellow-500 to-orange-600 text-white font-semibold rounded-2xl shadow-2xl border-2 border-yellow-400 animate-pulse';
+        reconnectMsg.innerHTML = `
+            <div class="flex items-center gap-3">
+                <div class="text-xl">🔄</div>
+                <div>Reconnecting to server...</div>
+            </div>
+        `;
         
         document.body.appendChild(reconnectMsg);
     }
@@ -740,12 +797,24 @@ class CardGame {
         
         data.players.forEach(player => {
             const playerDiv = document.createElement('div');
-            playerDiv.className = 'player-item';
+            playerDiv.className = 'bg-gray-700 bg-opacity-50 rounded-2xl p-4 border-2 border-gray-600 hover:border-blue-500 transition-all duration-300';
             playerDiv.innerHTML = `
-                <span class="player-name">${player.name}${player.id === this.playerId ? ' (You)' : ''}</span>
-                <span class="player-status ${player.isReady ? 'status-ready' : 'status-waiting'}">
-                    ${player.isReady ? 'Ready' : 'Waiting'}
-                </span>
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-3">
+                        <div class="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-bold text-lg">
+                            ${player.name.charAt(0).toUpperCase()}
+                        </div>
+                        <div>
+                            <div class="font-semibold text-white">${player.name}${player.id === this.playerId ? ' (You)' : ''}</div>
+                            <div class="text-sm text-gray-400">Player ID: ${player.id.slice(-4)}</div>
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        <span class="inline-block px-3 py-1 rounded-full text-sm font-semibold ${player.isReady ? 'bg-green-600 text-white' : 'bg-gray-600 text-gray-300'}">
+                            ${player.isReady ? '✅ Ready' : '⏳ Waiting'}
+                        </span>
+                    </div>
+                </div>
             `;
             playersList.appendChild(playerDiv);
         });
@@ -857,7 +926,7 @@ class CardGame {
         this.updateOtherPlayers();
         this.updateCurrentPlayerDisplay();
         this.updateDeckCount();
-        this.updateTableCards();
+        this.updateTableCardsInCenter();
         this.updateMyCards();
         this.updateTakeCardsButton();
     }
@@ -872,20 +941,52 @@ class CardGame {
     }
 
     updateOtherPlayers() {
-        const otherPlayersDiv = document.getElementById('otherPlayers');
-        otherPlayersDiv.innerHTML = '';
+        const playerPositionsDiv = document.getElementById('playerPositions');
+        playerPositionsDiv.innerHTML = '';
         
-        this.gameState.players.forEach(player => {
+        // Calculate positions around the circle
+        const radius = 200; // Adjust based on table size
+        const centerX = 300; // Half of table width
+        const centerY = 300; // Half of table height
+        
+        this.gameState.players.forEach((player, index) => {
             if (player.id !== this.playerId) {
+                // Calculate position around the circle
+                const angle = (index * (360 / this.gameState.players.length)) * (Math.PI / 180);
+                const x = centerX + radius * Math.cos(angle);
+                const y = centerY + radius * Math.sin(angle);
+                
                 const playerDiv = document.createElement('div');
-                playerDiv.className = `other-player ${player.id === this.gameState.currentPlayer ? 'current-turn' : ''}`;
+                playerDiv.className = `absolute transform -translate-x-1/2 -translate-y-1/2 z-10`;
+                playerDiv.style.left = `${x}px`;
+                playerDiv.style.top = `${y}px`;
+                
                 playerDiv.innerHTML = `
-                    <div class="other-player-name">${player.name}</div>
-                    <div class="other-player-cards">
-                        H:${player.handCards.length} B:${player.blindCount}
+                    <div class="text-center">
+                        <!-- Player Avatar -->
+                        <div class="w-16 h-16 md:w-20 md:h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-bold text-lg md:text-xl mx-auto mb-2 border-4 ${player.id === this.gameState.currentPlayer ? 'border-yellow-400 animate-pulse' : 'border-gray-600'} shadow-2xl">
+                            ${player.name.charAt(0).toUpperCase()}
+                        </div>
+                        
+                        <!-- Player Name -->
+                        <div class="text-sm md:text-base font-semibold text-white mb-1 bg-gray-800 bg-opacity-75 px-2 py-1 rounded-lg">
+                            ${player.name}
+                        </div>
+                        
+                        <!-- Player Cards Info -->
+                        <div class="text-xs md:text-sm text-blue-300 bg-gray-800 bg-opacity-75 px-2 py-1 rounded-lg">
+                            H:${player.handCards.length} B:${player.blindCount}
+                        </div>
+                        
+                        <!-- Current Turn Indicator -->
+                        ${player.id === this.gameState.currentPlayer ? 
+                            '<div class="mt-2 text-yellow-400 text-lg animate-pulse">🎯</div>' : 
+                            ''
+                        }
                     </div>
                 `;
-                otherPlayersDiv.appendChild(playerDiv);
+                
+                playerPositionsDiv.appendChild(playerDiv);
             }
         });
     }
@@ -914,15 +1015,46 @@ class CardGame {
         document.getElementById('deckCount').textContent = this.gameState.deckCount;
     }
 
+    // Update table cards in the center of the circular table
+    updateTableCardsInCenter() {
+        const tableCardsDiv = document.getElementById('tableCards');
+        
+        if (this.gameState.tableCards.length === 0) {
+            tableCardsDiv.innerHTML = `
+                <div class="text-center text-gray-400 text-lg md:text-xl font-semibold">
+                    <div class="text-4xl mb-2">🎴</div>
+                    <div>Discard Pile</div>
+                    <div class="text-sm text-gray-500 mt-1">Throw your first card!</div>
+                </div>
+            `;
+        } else {
+            tableCardsDiv.innerHTML = '';
+            this.gameState.tableCards.forEach((card, index) => {
+                const cardDiv = this.createCardElement(card);
+                // Add stagger animation for multiple cards
+                cardDiv.style.animationDelay = `${index * 0.1}s`;
+                tableCardsDiv.appendChild(cardDiv);
+            });
+        }
+    }
+    
     updateTableCards() {
         const tableCardsDiv = document.getElementById('tableCards');
         
         if (this.gameState.tableCards.length === 0) {
-            tableCardsDiv.innerHTML = '<div class="empty-table">Throw your first card!</div>';
+            tableCardsDiv.innerHTML = `
+                <div class="text-center text-gray-400 text-lg md:text-xl font-semibold">
+                    <div class="text-4xl mb-2">🎴</div>
+                    <div>Discard Pile</div>
+                    <div class="text-sm text-gray-500 mt-1">Throw your first card!</div>
+                </div>
+            `;
         } else {
             tableCardsDiv.innerHTML = '';
-            this.gameState.tableCards.forEach(card => {
+            this.gameState.tableCards.forEach((card, index) => {
                 const cardDiv = this.createCardElement(card);
+                // Add stagger animation for multiple cards
+                cardDiv.style.animationDelay = `${index * 0.1}s`;
                 tableCardsDiv.appendChild(cardDiv);
             });
         }
@@ -1011,15 +1143,34 @@ class CardGame {
     // Card creation and management
     createCardElement(card, clickable = false) {
         const cardDiv = document.createElement('div');
-        cardDiv.className = `card ${card.suit}`;
+        cardDiv.className = `w-16 h-24 md:w-20 md:h-28 bg-white rounded-xl border-2 border-gray-300 shadow-lg transform transition-all duration-300 cursor-pointer hover:scale-110 hover:shadow-2xl hover:-translate-y-2 ${clickable ? 'hover:border-blue-500' : ''} ${this.selectedCards.some(c => c.suit === card.suit && c.value === card.value) ? 'ring-4 ring-blue-500 ring-opacity-75 scale-110 -translate-y-2' : ''}`;
+        
+        // Card content with suit colors
+        const suitColor = card.suit === 'hearts' || card.suit === 'diamonds' ? 'text-red-600' : 'text-black';
+        const suitSymbol = this.getSuitSymbol(card.suit);
+        
         cardDiv.innerHTML = `
-            <div class="card-value">${card.value}</div>
-            <div class="card-suit">${this.getSuitSymbol(card.suit)}</div>
+            <div class="flex flex-col h-full p-2">
+                <div class="text-left">
+                    <div class="text-sm md:text-base font-bold ${suitColor}">${card.value}</div>
+                    <div class="text-xs md:text-sm ${suitColor}">${suitSymbol}</div>
+                </div>
+                <div class="flex-1 flex items-center justify-center">
+                    <div class="text-2xl md:text-3xl ${suitColor}">${suitSymbol}</div>
+                </div>
+                <div class="text-right transform rotate-180">
+                    <div class="text-sm md:text-base font-bold ${suitColor}">${card.value}</div>
+                    <div class="text-xs md:text-sm ${suitColor}">${suitSymbol}</div>
+                </div>
+            </div>
         `;
         
         if (clickable) {
             cardDiv.addEventListener('click', () => this.toggleCardSelection(card, cardDiv));
         }
+        
+        // Add deal animation
+        cardDiv.style.animation = 'deal 0.5s ease-out';
         
         return cardDiv;
     }
@@ -1070,11 +1221,16 @@ class CardGame {
 
     createBlindCardElement(index) {
         const cardDiv = document.createElement('div');
-        cardDiv.className = 'card blind';
-        cardDiv.dataset.blindIndex = index; // Store index for identification
+        cardDiv.className = `w-16 h-24 md:w-20 md:h-28 bg-gradient-to-br from-purple-600 to-purple-800 rounded-xl border-2 border-purple-400 shadow-lg transform transition-all duration-300 cursor-pointer hover:scale-110 hover:shadow-2xl hover:-translate-y-2 ${this.selectedBlindCardIndex === index ? 'ring-4 ring-yellow-400 ring-opacity-75 scale-110 -translate-y-2' : ''}`;
+        cardDiv.dataset.blindIndex = index;
+        
         cardDiv.innerHTML = `
-            <div class="card-value">?</div>
-            <div class="card-suit">?</div>
+            <div class="flex flex-col h-full p-2 items-center justify-center">
+                <div class="text-center">
+                    <div class="text-2xl md:text-3xl text-white font-bold mb-1">?</div>
+                    <div class="text-xs md:text-sm text-purple-200">Blind</div>
+                </div>
+            </div>
         `;
         
         // Add click handler for blind card reveal
@@ -1082,6 +1238,9 @@ class CardGame {
             console.log('Blind card clicked, index:', index);
             this.revealBlindCard(index);
         });
+        
+        // Add reveal animation
+        cardDiv.style.animation = 'reveal 0.6s ease-out';
         
         return cardDiv;
     }
